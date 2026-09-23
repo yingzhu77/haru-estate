@@ -6,18 +6,18 @@ import {
   Connection,
   ArrowRight,
   DocumentChecked,
-} from "@element-plus/icons-vue";
-import type { Run } from "../../api/types";
-import { showEvidence, state } from "../../state";
-import { statusLabels } from "./useWorkbench";
-defineProps<{ run: Run | null; busy: boolean; pollError: string }>();
-const emit = defineEmits<{ resume: []; refresh: [] }>();
+} from '@element-plus/icons-vue'
+import type { Run } from '../../api/types'
+import { showEvidence, state } from '../../state'
+import { statusLabels } from './useWorkbench'
+defineProps<{ run: Run | null; busy: boolean; pollError: string }>()
+const emit = defineEmits<{ resume: []; refresh: [] }>()
 const timeLabel = (value: string) => {
-  const date = new Date(value);
+  const date = new Date(value)
   return Number.isNaN(date.getTime())
     ? value
-    : date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
-};
+    : date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+}
 </script>
 
 <template>
@@ -83,9 +83,7 @@ const timeLabel = (value: string) => {
       <div class="card-heading">
         <el-icon>
           <CircleCheckFilled v-if="run.status === 'completed'" /><WarningFilled
-            v-else-if="
-              ['failed', 'incomplete', 'interrupted'].includes(run.status)
-            "
+            v-else-if="['failed', 'incomplete', 'interrupted'].includes(run.status)"
           /><Clock v-else />
         </el-icon><b>{{ statusLabels[run.status] ?? run.status }}</b><time>{{ timeLabel(run.created_at) }}</time>
       </div>
@@ -135,9 +133,7 @@ const timeLabel = (value: string) => {
       <div class="card-heading">
         <el-icon><Clock /></el-icon><b>等待首次预测</b>
       </div>
-      <p>
-        选择项目与预测时点，检查左侧参数后生成预测。计算过程和来源将在这里保留。
-      </p>
+      <p>选择项目与预测时点，检查左侧参数后生成预测。计算过程和来源将在这里保留。</p>
     </div>
     <div
       v-if="run?.steps?.length"
@@ -158,8 +154,7 @@ const timeLabel = (value: string) => {
             <b>{{ step.name }}</b><time>{{ timeLabel(step.created_at) }}</time>
           </div>
           <p>{{ step.message }}</p>
-          <span class="step-meta">{{ statusLabels[step.status] ?? step.status }} · 尝试
-            {{ step.attempt }}</span>
+          <span class="step-meta">{{ statusLabels[step.status] ?? step.status }} · 尝试 {{ step.attempt }}</span>
         </div>
       </div>
     </div>
@@ -181,9 +176,7 @@ const timeLabel = (value: string) => {
     </div>
     <div class="activity-card explainer">
       <b>每一个数字，都有来处</b>
-      <p>
-        销售、回款与收入确认分开计算；开发投入、成本结转和实际付款分别追踪。
-      </p>
+      <p>销售、回款与收入确认分开计算；开发投入、成本结转和实际付款分别追踪。</p>
       <p>当前由程序提供测算和运行记录。模型接入后，将辅助查询、解释和追问。</p>
     </div>
     <div class="activity-footer">
@@ -354,7 +347,7 @@ time {
   position: relative;
 }
 .step-item:not(:last-child)::before {
-  content: "";
+  content: '';
   position: absolute;
   left: 4px;
   top: 12px;

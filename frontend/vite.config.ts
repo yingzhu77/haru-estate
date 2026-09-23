@@ -4,5 +4,7 @@ export default defineConfig({
   plugins: [vue()],
   server: { proxy: { '/api': 'http://127.0.0.1:8000' } },
   test: { environment: 'jsdom', include: ['src/**/*.test.ts'] },
-  build: { rollupOptions: { output: { manualChunks: { charts: ['echarts'], ui: ['element-plus'] } } } },
+  build: {
+    rollupOptions: { output: { manualChunks: { charts: ['echarts'], ui: ['element-plus'] } } },
+  },
 })

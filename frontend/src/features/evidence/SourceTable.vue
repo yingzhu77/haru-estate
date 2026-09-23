@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import type { Source } from "../../api/types";
-import { formatMoney } from "../../state";
-import { metricLabels } from "../data/editor";
-defineProps<{ sources: Source[] }>();
+import type { Source } from '../../api/types'
+import { formatMoney } from '../../state'
+import { metricLabels } from '../data/editor'
+defineProps<{ sources: Source[] }>()
 function label(metric: string) {
-  return metricLabels[metric as keyof typeof metricLabels] ?? metric;
+  return metricLabels[metric as keyof typeof metricLabels] ?? metric
 }
 </script>
 <template>
@@ -23,9 +23,7 @@ function label(metric: string) {
       min-width="95"
     >
       <template #default="{ row }">
-        {{
-          label(row.metric)
-        }}
+        {{ label(row.metric) }}
       </template>
     </el-table-column>
     <el-table-column
@@ -34,9 +32,7 @@ function label(metric: string) {
       width="130"
     >
       <template #default="{ row }">
-        {{
-          formatMoney(row.amount)
-        }}
+        {{ formatMoney(row.amount) }}
       </template>
     </el-table-column>
     <el-table-column

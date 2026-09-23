@@ -239,6 +239,8 @@ export interface components {
              * @default
              */
             note: string;
+            /** Contract Id */
+            contract_id?: string | null;
         };
         /** Assumptions */
         Assumptions: {
@@ -557,6 +559,11 @@ export interface components {
              */
             profit: string;
             /**
+             * Cumulative Profit
+             * @default 0.00
+             */
+            cumulative_profit: string;
+            /**
              * Net Cash Flow
              * @default 0.00
              */
@@ -734,14 +741,22 @@ export interface components {
             attempt: number;
             /** Parent Id */
             parent_id?: string | null;
+            /** Supersedes Run Id */
+            supersedes_run_id?: string | null;
             result?: components["schemas"]["ForecastResult"] | null;
             /** Members */
             members?: components["schemas"]["Member"][];
             /** Steps */
             steps?: components["schemas"]["Step"][];
+            /** Overrides */
+            overrides?: {
+                [key: string]: components["schemas"]["Overrides"];
+            };
         };
         /** RunCreate */
         RunCreate: {
+            /** Supersedes Run Id */
+            supersedes_run_id?: string | null;
             /** Project Ids */
             project_ids: string[];
             /**

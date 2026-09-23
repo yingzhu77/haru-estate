@@ -9,19 +9,37 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 Month = Annotated[str, Field(pattern=r"^20\d{2}-(0[1-9]|1[0-2])$")]
 Amount = Annotated[str, Field(pattern=r"^-?\d+(\.\d{1,8})?$", max_length=24)]
 Metric = Literal[
-    "sales", "collections", "revenue", "cogs", "development", "payments", "expenses",
-    "expense_payments", "taxes", "tax_payments", "interest", "borrowing", "repayment",
+    "sales",
+    "collections",
+    "revenue",
+    "cogs",
+    "development",
+    "payments",
+    "expenses",
+    "expense_payments",
+    "taxes",
+    "tax_payments",
+    "interest",
+    "borrowing",
+    "repayment",
 ]
 Scenario = Literal["base", "optimistic", "prudent"]
 
 
 class Model(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
 
 class Payment(Model):
     month: Month
     amount: Amount
+
+    @field_validator("amount")
+    @classmethod
+    def nonnegative(cls, value: str) -> str:
+        if Decimal(value) < 0:
+            raise ValueError("计划收付款金额不能为负")
+        return value
 
 
 class Phase(Model):
@@ -64,6 +82,7 @@ class Actual(Model):
     metric: Metric
     amount: Amount
     note: str = ""
+    contract_id: str | None = None
 
 
 class Assumptions(Model):
@@ -106,6 +125,13 @@ class Dataset(Model):
                 raise ValueError("记录编号重复")
             if any(item.phase_id not in phase_ids for item in items):
                 raise ValueError("记录引用了不存在的分期")
+        contracts = {c.id: c for c in self.contracts}
+        for row in self.actuals:
+            if row.contract_id and (
+                row.contract_id not in contracts
+                or contracts[row.contract_id].phase_id != row.phase_id
+            ):
+                raise ValueError("实际记录关联的合同不属于对应分期")
         return self
 
 
@@ -168,6 +194,7 @@ class Overrides(Model):
 
 
 class RunCreate(Model):
+    supersedes_run_id: str | None = None
     project_ids: list[str] = Field(min_length=1, max_length=50)
     kind: Literal["project", "portfolio"] = "project"
     forecast_origin: date = date(2026, 8, 31)
@@ -216,6 +243,7 @@ class MonthResult(Model):
     borrowing: str = "0.00"
     repayment: str = "0.00"
     profit: str = "0.00"
+    cumulative_profit: str = "0.00"
     net_cash_flow: str = "0.00"
     cash_balance: str = "0.00"
     uncovered_gap: str = "0.00"
@@ -285,9 +313,11 @@ class Run(Model):
     error: str | None = None
     attempt: int = 1
     parent_id: str | None = None
+    supersedes_run_id: str | None = None
     result: ForecastResult | None = None
     members: list[Member] = Field(default_factory=list)
     steps: list[Step] = Field(default_factory=list)
+    overrides: dict[str, Overrides] = Field(default_factory=dict)
 
 
 class ImportPreview(Model):

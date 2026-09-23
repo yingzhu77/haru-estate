@@ -1,68 +1,63 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { api } from "../../api/client";
-import type { Evidence } from "../../api/types";
-import { formatMoney, state } from "../../state";
-import { runLabels } from "../data/editor";
-import SourceTable from "./SourceTable.vue";
-type Selection = NonNullable<typeof state.evidence>;
-const evidence = ref<Evidence | null>(null);
-const loading = ref(false);
-const error = ref("");
-const trail = ref<Selection[]>([]);
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { api } from '../../api/client'
+import type { Evidence } from '../../api/types'
+import { formatMoney, state } from '../../state'
+import { runLabels } from '../data/editor'
+import SourceTable from './SourceTable.vue'
+type Selection = NonNullable<typeof state.evidence>
+const evidence = ref<Evidence | null>(null)
+const loading = ref(false)
+const error = ref('')
+const trail = ref<Selection[]>([])
 const open = computed({
   get: () => !!state.evidence,
   set: (value) => {
     if (!value) {
-      state.evidence = null;
-      trail.value = [];
+      state.evidence = null
+      trail.value = []
     }
   },
-});
-let requestSequence = 0;
-let navigating = false;
+})
+let requestSequence = 0
+let navigating = false
 watch(
   () => state.evidence,
   async (selection) => {
-    const sequence = ++requestSequence;
-    if (!navigating) trail.value = [];
-    navigating = false;
-    evidence.value = null;
-    error.value = "";
-    if (!selection) return;
-    loading.value = true;
+    const sequence = ++requestSequence
+    if (!navigating) trail.value = []
+    navigating = false
+    evidence.value = null
+    error.value = ''
+    if (!selection) return
+    loading.value = true
     try {
-      const result = await api.evidence(
-        selection.runId,
-        selection.metric,
-        selection.month,
-      );
-      if (sequence === requestSequence) evidence.value = result;
+      const result = await api.evidence(selection.runId, selection.metric, selection.month)
+      if (sequence === requestSequence) evidence.value = result
     } catch (e) {
-      if (sequence === requestSequence)
-        error.value = e instanceof Error ? e.message : String(e);
+      if (sequence === requestSequence) error.value = e instanceof Error ? e.message : String(e)
     } finally {
-      if (sequence === requestSequence) loading.value = false;
+      if (sequence === requestSequence) loading.value = false
     }
   },
   { immediate: true },
-);
+)
 function drill(runId: string) {
-  if (!state.evidence) return;
-  trail.value = [...trail.value, { ...state.evidence }];
-  navigating = true;
-  state.evidence = { ...state.evidence, runId };
+  if (!state.evidence) return
+  trail.value = [...trail.value, { ...state.evidence }]
+  navigating = true
+  state.evidence = { ...state.evidence, runId }
 }
 function back() {
-  const selection = trail.value[trail.value.length - 1];
-  if (!selection) return;
-  trail.value = trail.value.slice(0, -1);
-  navigating = true;
-  state.evidence = selection;
+  const selection = trail.value[trail.value.length - 1]
+  if (!selection) return
+  trail.value = trail.value.slice(0, -1)
+  navigating = true
+  state.evidence = selection
 }
 onBeforeUnmount(() => {
-  ++requestSequence;
-});
+  ++requestSequence
+})
 </script>
 <template>
   <el-drawer
@@ -91,11 +86,11 @@ onBeforeUnmount(() => {
     />
     <template v-else-if="evidence">
       <p class="muted">
-        运行 {{ evidence.run_id }} · {{ evidence.month || "全周期" }} · 指标
+        运行 {{ evidence.run_id }} · {{ evidence.month || '全周期' }} · 指标
         {{ evidence.metric }}
       </p>
       <p class="muted">
-        输入版本：{{ evidence.revision_ids.join("、") || "无可用输入版本" }}
+        输入版本：{{ evidence.revision_ids.join('、') || '无可用输入版本' }}
       </p>
       <el-alert
         title="金额、规则与记录来自该次运行保存的结果，不会替换为项目最新数据。金额展示单位为万元。"
@@ -118,9 +113,7 @@ onBeforeUnmount(() => {
             width="120"
           >
             <template #default="{ row }">
-              {{
-                runLabels[row.status] ?? row.status
-              }}
+              {{ runLabels[row.status] ?? row.status }}
             </template>
           </el-table-column>
           <el-table-column
@@ -128,9 +121,7 @@ onBeforeUnmount(() => {
             width="165"
           >
             <template #default="{ row }">
-              {{
-                formatMoney(row.profit)
-              }}
+              {{ formatMoney(row.profit) }}
             </template>
           </el-table-column>
           <el-table-column

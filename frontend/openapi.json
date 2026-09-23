@@ -677,6 +677,17 @@
             "type": "string",
             "title": "Note",
             "default": ""
+          },
+          "contract_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Id"
           }
         },
         "additionalProperties": false,
@@ -1358,6 +1369,11 @@
             "title": "Profit",
             "default": "0.00"
           },
+          "cumulative_profit": {
+            "type": "string",
+            "title": "Cumulative Profit",
+            "default": "0.00"
+          },
           "net_cash_flow": {
             "type": "string",
             "title": "Net Cash Flow",
@@ -1751,6 +1767,17 @@
             ],
             "title": "Parent Id"
           },
+          "supersedes_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedes Run Id"
+          },
           "result": {
             "anyOf": [
               {
@@ -1774,6 +1801,13 @@
             },
             "type": "array",
             "title": "Steps"
+          },
+          "overrides": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Overrides"
+            },
+            "type": "object",
+            "title": "Overrides"
           }
         },
         "additionalProperties": false,
@@ -1794,6 +1828,17 @@
       },
       "RunCreate": {
         "properties": {
+          "supersedes_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedes Run Id"
+          },
           "project_ids": {
             "items": {
               "type": "string"

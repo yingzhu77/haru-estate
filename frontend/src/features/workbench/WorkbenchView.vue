@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
-import { onBeforeRouteLeave } from "vue-router";
-import { ElMessageBox } from "element-plus";
+import { computed, ref } from 'vue'
+import { onBeforeRouteLeave } from 'vue-router'
+import { ElMessageBox } from 'element-plus'
 import {
   ArrowRight,
   Histogram,
@@ -13,13 +13,13 @@ import {
   Document,
   Plus,
   Refresh,
-} from "@element-plus/icons-vue";
-import type { MonthResult } from "../../api/types";
-import { state, formatMoney, showEvidence } from "../../state";
-import { scenarioLabels, statusLabels, useWorkbench } from "./useWorkbench";
-import ForecastChart from "./ForecastChart.vue";
-import ParameterPanel from "./ParameterPanel.vue";
-import RunActivity from "./RunActivity.vue";
+} from '@element-plus/icons-vue'
+import type { MonthResult } from '../../api/types'
+import { state, formatMoney, showEvidence } from '../../state'
+import { scenarioLabels, statusLabels, useWorkbench } from './useWorkbench'
+import ForecastChart from './ForecastChart.vue'
+import ParameterPanel from './ParameterPanel.vue'
+import RunActivity from './RunActivity.vue'
 
 const {
   editor,
@@ -39,89 +39,82 @@ const {
   loadScope,
   markDirty,
   refreshStatus,
-} = useWorkbench();
-const chartView = ref<"profit" | "cash" | "lifecycle">("profit");
-const sensitivityOpen = ref(false);
-const detailExpanded = ref(false);
-const summary = computed(() => result.value?.summary);
+} = useWorkbench()
+const chartView = ref<'profit' | 'cash' | 'lifecycle'>('profit')
+const sensitivityOpen = ref(false)
+const detailExpanded = ref(false)
+const summary = computed(() => result.value?.summary)
 const rows = computed(
   () =>
     result.value?.months.filter(
-      (row) =>
-        chartView.value === "lifecycle" ||
-        result.value!.target_months.includes(row.month),
+      (row) => chartView.value === 'lifecycle' || result.value!.target_months.includes(row.month),
     ) ?? [],
-);
+)
 const predictionPeriod = computed(() => {
-  const months = result.value?.target_months ?? [];
-  return months.length
-    ? `${months[0]} — ${months.at(-1)}`
-    : "下一个自然月起，逐月预测12个月";
-});
+  const months = result.value?.target_months ?? []
+  return months.length ? `${months[0]} — ${months.at(-1)}` : '下一个自然月起，逐月预测12个月'
+})
 const displayedTitle = computed(() =>
-  resultRun.value
-    ? resultRun.value.project_names.join(" / ")
-    : "利润与现金流概览",
-);
-const oldResult = computed(
-  () => !!resultRun.value && currentRun.value?.id !== resultRun.value.id,
-);
+  resultRun.value ? resultRun.value.project_names.join(' / ') : '利润与现金流概览',
+)
+const oldResult = computed(() => !!resultRun.value && currentRun.value?.id !== resultRun.value.id)
 const changedTime = computed(
   () =>
     !!resultRun.value &&
     (resultRun.value.forecast_origin !== state.forecastOrigin ||
       resultRun.value.information_cutoff !== state.informationCutoff),
-);
+)
 const periodLabels: Record<string, string> = {
-  actual: "实际",
-  estimate: "估计",
-  forecast: "预测",
-  mixed: "混合",
-};
+  actual: '实际',
+  estimate: '估计',
+  forecast: '预测',
+  mixed: '混合',
+}
 
-function inspect(metric = "profit", month?: string) {
-  if (resultRun.value) showEvidence(resultRun.value.id, metric, month);
+function inspect(metric = 'profit', month?: string) {
+  if (resultRun.value) showEvidence(resultRun.value.id, metric, month)
 }
 function inspectChart(month: string, metric: string) {
-  inspect(metric, month);
+  inspect(metric, month)
 }
 function onCellClick(row: MonthResult, column: { property: string }) {
   if (
     [
-      "revenue",
-      "cogs",
-      "profit",
-      "collections",
-      "net_cash_flow",
-      "payments",
-      "expenses",
-      "taxes",
-      "interest",
+      'revenue',
+      'cogs',
+      'profit',
+      'cumulative_profit',
+      'collections',
+      'net_cash_flow',
+      'payments',
+      'expenses',
+      'taxes',
+      'interest',
     ].includes(column.property)
   ) {
-    inspect(column.property, row.month);
+    inspect(column.property, row.month)
   }
 }
 function formatCell(row: MonthResult, column: { property: string }) {
-  return formatMoney(row[column.property as keyof MonthResult]);
+  return formatMoney(row[column.property as keyof MonthResult])
 }
 onBeforeRouteLeave(async () => {
-  if (!dirtySinceResult.value) return true;
+  if (!dirtySinceResult.value) return true
   try {
     await ElMessageBox.confirm(
-      "情景草稿还没有生成预测，本次打开页面期间会保留；刷新或关闭后未提交内容将丢失。",
-      "保留草稿并离开？",
+      '情景草稿还没有生成预测，本次打开页面期间会保留；刷新或关闭后未提交内容将丢失。',
+      '保留草稿并离开？',
       {
-        confirmButtonText: "保留并离开",
-        cancelButtonText: "继续编辑",
-        type: "warning",
+        confirmButtonText: '保留并离开',
+        cancelButtonText: '继续编辑',
+        type: 'warning',
       },
-    );
-    return true;
+    )
+    return true
   } catch {
-    return false;
+    return false
   }
-});
+})
 </script>
 
 <template>
@@ -177,9 +170,7 @@ onBeforeRouteLeave(async () => {
         >
           重新加载输入与记录
         </el-button>
-        <p>
-          如请求已提交，请先查看历史运行，再决定是否重试。已有结果不会被删除。
-        </p>
+        <p>如请求已提交，请先查看历史运行，再决定是否重试。已有结果不会被删除。</p>
       </template>
     </el-alert>
     <div
@@ -223,8 +214,7 @@ onBeforeRouteLeave(async () => {
             v-if="resultRun"
             class="result-version"
           >
-            <span>{{ displayedTitle }} ·
-              {{ scenarioLabels[resultRun.scenario] }}情景</span>
+            <span>{{ displayedTitle }} · {{ scenarioLabels[resultRun.scenario] }}情景</span>
             <RouterLink :to="`/runs/${resultRun.id}`">
               运行 {{ resultRun.id.slice(0, 8) }}
             </RouterLink>
@@ -236,8 +226,8 @@ onBeforeRouteLeave(async () => {
           >
             {{
               oldResult
-                ? "当前任务尚未产生完整新结果，下面保留上一次已完成预测。"
-                : "输入条件已变化，下面仍为已保存版本；提交预测后更新。"
+                ? '当前任务尚未产生完整新结果，下面保留上一次已完成预测。'
+                : '输入条件已变化，下面仍为已保存版本；提交预测后更新。'
             }}
           </div>
           <div class="metrics-grid">
@@ -249,20 +239,18 @@ onBeforeRouteLeave(async () => {
               <span class="metric-label"><el-icon><Histogram /></el-icon>下月利润</span><strong
                 class="money"
                 :class="{ negative: Number(summary?.next_month_profit) < 0 }"
-              >{{ formatMoney(summary?.next_month_profit) }}</strong><span class="metric-foot">{{
-                result?.target_months[0] ?? "等待生成预测"
-              }}</span>
+              >{{ formatMoney(summary?.next_month_profit) }}</strong><span class="metric-foot">{{ result?.target_months[0] ?? '等待生成预测' }}</span>
             </button>
             <button
               class="metric-card"
               :disabled="!result"
-              @click="inspect('profit')"
+              @click="inspect('twelve_month_profit')"
             >
               <span class="metric-label"><el-icon><TrendCharts /></el-icon>未来12个月利润</span><strong
                 class="money"
                 :class="{ negative: Number(summary?.twelve_month_profit) < 0 }"
               >{{ formatMoney(summary?.twelve_month_profit) }}</strong><span class="metric-foot">{{
-                result ? "目标期间累计预测" : "历史数据 + 未来业务计划"
+                result ? '目标期间累计预测' : '历史数据 + 未来业务计划'
               }}</span>
             </button>
             <button
@@ -273,7 +261,7 @@ onBeforeRouteLeave(async () => {
               <span class="metric-label"><el-icon><PieChart /></el-icon>利润情景区间</span><strong class="money range-value">{{
                 summary
                   ? `${formatMoney(summary.range_low)} ~ ${formatMoney(summary.range_high)}`
-                  : "—"
+                  : '—'
               }}</strong><span class="metric-foot">三种情景范围 · 非置信区间</span>
             </button>
             <button
@@ -281,12 +269,8 @@ onBeforeRouteLeave(async () => {
               :disabled="!result"
               @click="inspect('uncovered_gap')"
             >
-              <span class="metric-label"><el-icon><Coin /></el-icon>最大资金缺口</span><strong class="money">{{
-                formatMoney(summary?.max_funding_gap)
-              }}</strong><span class="metric-foot">{{
-                state.mode === "portfolio"
-                  ? "逐月汇总各项目未覆盖缺口"
-                  : "全周期未覆盖缺口峰值"
+              <span class="metric-label"><el-icon><Coin /></el-icon>最大资金缺口</span><strong class="money">{{ formatMoney(summary?.max_funding_gap) }}</strong><span class="metric-foot">{{
+                state.mode === 'portfolio' ? '逐月汇总各项目未覆盖缺口' : '全周期未覆盖缺口峰值'
               }}</span>
             </button>
           </div>
@@ -294,21 +278,16 @@ onBeforeRouteLeave(async () => {
             v-if="resultRun"
             class="snapshot-caption"
           >
-            预测基准 {{ resultRun.forecast_origin }} · 信息截止
-            {{ resultRun.information_cutoff }} · {{ result?.rule_version
-            }}<span>快照
-              {{
-                resultRun.revision_ids.map((id) => id.slice(0, 6)).join(" / ")
-              }}</span>
+            预测基准 {{ resultRun.forecast_origin }} · 信息截止 {{ resultRun.information_cutoff }} ·
+            {{ result?.rule_version
+            }}<span>快照 {{ resultRun.revision_ids.map((id) => id.slice(0, 6)).join(' / ') }}</span>
           </div>
         </section>
 
         <section class="panel trend-panel">
           <div class="section-header">
             <h2>
-              {{
-                chartView === "lifecycle" ? "全周期月度趋势" : "未来12个月趋势"
-              }}
+              {{ chartView === 'lifecycle' ? '全周期月度趋势' : '未来12个月趋势' }}
             </h2>
             <div
               class="chart-switch"
@@ -350,9 +329,7 @@ onBeforeRouteLeave(async () => {
               <el-icon><DataLine /></el-icon>
             </div>
             <h3>
-              {{
-                busy ? "正在根据已保存输入测算" : "让项目计划，变成可追溯的预测"
-              }}
+              {{ busy ? '正在根据已保存输入测算' : '让项目计划，变成可追溯的预测' }}
             </h3>
             <p>选择预测时点与情景，生成下月、未来12个月及全周期结果。</p>
             <span>历史实际 → 合同与计划 → 程序测算 → 来源核对</span><el-button
@@ -427,9 +404,7 @@ onBeforeRouteLeave(async () => {
               min-width="145"
             >
               <template #default="{ row }">
-                {{
-                  formatMoney(row.profit)
-                }}
+                {{ formatMoney(row.profit) }}
               </template>
             </el-table-column><el-table-column
               label="绑定预测"
@@ -459,7 +434,7 @@ onBeforeRouteLeave(async () => {
               :disabled="!result"
               @click="detailExpanded = !detailExpanded"
             >
-              {{ detailExpanded ? "收起明细" : "展开明细" }}
+              {{ detailExpanded ? '收起明细' : '展开明细' }}
               <el-icon><ArrowRight /></el-icon>
             </button>
           </div>
@@ -585,6 +560,13 @@ onBeforeRouteLeave(async () => {
                   </button>
                 </template>
               </el-table-column>
+              <el-table-column
+                prop="cumulative_profit"
+                label="预测起累计利润"
+                align="right"
+                min-width="135"
+                :formatter="formatCell"
+              />
             </template>
             <el-table-column
               label="依据"
@@ -595,10 +577,7 @@ onBeforeRouteLeave(async () => {
                 <button
                   class="text-link"
                   @click.stop="
-                    inspect(
-                      chartView === 'cash' ? 'net_cash_flow' : 'profit',
-                      row.month,
-                    )
+                    inspect(chartView === 'cash' ? 'net_cash_flow' : 'profit', row.month)
                   "
                 >
                   查看
@@ -617,8 +596,7 @@ onBeforeRouteLeave(async () => {
             class="table-note totals-note"
           >
             <span>全周期利润
-              <b class="money">{{ formatMoney(summary.lifecycle_profit) }} 万元</b></span><span>期末借款 <b>{{ formatMoney(summary.ending_debt) }} 万元</b></span><span>期末应收
-              <b>{{ formatMoney(summary.ending_receivables) }} 万元</b></span>
+              <b class="money">{{ formatMoney(summary.lifecycle_profit) }} 万元</b></span><span>期末借款 <b>{{ formatMoney(summary.ending_debt) }} 万元</b></span><span>期末应收 <b>{{ formatMoney(summary.ending_receivables) }} 万元</b></span>
           </div>
         </section>
       </div>
@@ -668,9 +646,7 @@ onBeforeRouteLeave(async () => {
             width="125"
           >
             <template #default="{ row }">
-              {{
-                formatMoney(row.profit)
-              }}
+              {{ formatMoney(row.profit) }}
             </template>
           </el-table-column><el-table-column
             label="影响金额"
@@ -678,8 +654,7 @@ onBeforeRouteLeave(async () => {
             width="110"
           >
             <template #default="{ row }">
-              <span :class="{ negative: Number(row.delta) < 0 }">{{ Number(row.delta) > 0 ? "+" : ""
-              }}{{ formatMoney(row.delta) }}</span>
+              <span :class="{ negative: Number(row.delta) < 0 }">{{ Number(row.delta) > 0 ? '+' : '' }}{{ formatMoney(row.delta) }}</span>
             </template>
           </el-table-column>
         </el-table>

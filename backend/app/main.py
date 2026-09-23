@@ -1,7 +1,7 @@
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
 
-from fastapi import FastAPI, Header, Query, UploadFile
+from fastapi import FastAPI, Header, HTTPException, Query, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.requests import Request
@@ -21,14 +21,33 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="HaruEstate", version="0.1.0", lifespan=lifespan)
 
 
+@app.exception_handler(HTTPException)
+async def http_error(_: Request, exc: HTTPException) -> JSONResponse:
+    from uuid import uuid4
+
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "code": "CONFLICT" if exc.status_code == 409 else "REQUEST_ERROR",
+            "message": str(exc.detail),
+            "request_id": str(uuid4()),
+        },
+    )
+
+
 @app.exception_handler(RequestValidationError)
 async def validation_error(_: Request, exc: RequestValidationError) -> JSONResponse:
     from uuid import uuid4
 
     messages = "; ".join(str(e["msg"]) for e in exc.errors())
-    return JSONResponse(status_code=422, content={
-        "code": "VALIDATION_ERROR", "message": messages, "request_id": str(uuid4()),
-    })
+    return JSONResponse(
+        status_code=422,
+        content={
+            "code": "VALIDATION_ERROR",
+            "message": messages,
+            "request_id": str(uuid4()),
+        },
+    )
 
 
 @app.get("/api/v1/health")
@@ -125,7 +144,9 @@ def resume(run_id: str) -> object:
 
 
 @app.get("/api/v1/runs/{run_id}/evidence", response_model=s.Evidence)
-def evidence(run_id: str, metric: str = Query(default="profit"), month: str | None = None) -> object:
+def evidence(
+    run_id: str, metric: str = Query(default="profit"), month: str | None = None
+) -> object:
     from app.application import service
 
     return service.evidence(run_id, metric, month)

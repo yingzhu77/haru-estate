@@ -1,47 +1,39 @@
 <script setup lang="ts">
-import { computed } from "vue";
-import {
-  DataAnalysis,
-  Setting,
-  RefreshLeft,
-  Calendar,
-} from "@element-plus/icons-vue";
-import type { Revision, RunCreate } from "../../api/types";
-import { state } from "../../state";
-import { defaultOverrides, scenarioLabels } from "./useWorkbench";
+import { computed } from 'vue'
+import { DataAnalysis, Setting, RefreshLeft, Calendar } from '@element-plus/icons-vue'
+import type { Revision, RunCreate } from '../../api/types'
+import { state } from '../../state'
+import { defaultOverrides, scenarioLabels } from './useWorkbench'
 
 const props = defineProps<{
-  revision?: Revision;
-  scenario: RunCreate["scenario"];
-  loading: boolean;
-  busy: boolean;
-  disabled: boolean;
-  selectedCount: number;
-}>();
+  revision?: Revision
+  scenario: RunCreate['scenario']
+  loading: boolean
+  busy: boolean
+  disabled: boolean
+  selectedCount: number
+}>()
 const emit = defineEmits<{
-  "update:scenario": [value: RunCreate["scenario"]];
-  changed: [];
-  generate: [];
-}>();
-const overrides = computed(
-  () => state.overrides[state.selectedProjectId] ?? defaultOverrides(),
-);
+  'update:scenario': [value: RunCreate['scenario']]
+  changed: []
+  generate: []
+}>()
+const overrides = computed(() => state.overrides[state.selectedProjectId] ?? defaultOverrides())
 const pricePercent = computed({
   get: () => Number(overrides.value.price_change) * 100,
   set: (value: number) => update({ price_change: (value / 100).toFixed(4) }),
-});
+})
 const costPercent = computed({
   get: () => Number(overrides.value.remaining_cost_change) * 100,
-  set: (value: number) =>
-    update({ remaining_cost_change: (value / 100).toFixed(4) }),
-});
+  set: (value: number) => update({ remaining_cost_change: (value / 100).toFixed(4) }),
+})
 const collectionDelay = computed({
   get: () => overrides.value.collection_delay,
   set: (value: number) => update({ collection_delay: value }),
-});
+})
 function update(change: Partial<typeof overrides.value>) {
-  state.overrides[state.selectedProjectId] = { ...overrides.value, ...change };
-  emit("changed");
+  state.overrides[state.selectedProjectId] = { ...overrides.value, ...change }
+  emit('changed')
 }
 function updateDelivery(phaseId: string, value: number | undefined) {
   update({
@@ -49,13 +41,13 @@ function updateDelivery(phaseId: string, value: number | undefined) {
       ...overrides.value.delivery_delays,
       [phaseId]: value ?? 0,
     },
-  });
+  })
 }
 function reset() {
-  state.overrides[state.selectedProjectId] = defaultOverrides();
-  emit("changed");
+  state.overrides[state.selectedProjectId] = defaultOverrides()
+  emit('changed')
 }
-const phases = computed(() => props.revision?.data.phases ?? []);
+const phases = computed(() => props.revision?.data.phases ?? [])
 </script>
 
 <template>
@@ -113,7 +105,7 @@ const phases = computed(() => props.revision?.data.phases ?? []);
             <div>
               <dt>计划售价</dt>
               <dd>
-                {{ Number(phase.price).toLocaleString("zh-CN") }}
+                {{ Number(phase.price).toLocaleString('zh-CN') }}
                 <small>元/㎡</small>
               </dd>
             </div>
@@ -135,8 +127,7 @@ const phases = computed(() => props.revision?.data.phases ?? []);
           </button>
         </div>
         <div class="parameter-field">
-          <label for="price-change">未售价格变化
-            <b>{{ pricePercent > 0 ? "+" : "" }}{{ pricePercent }}%</b></label>
+          <label for="price-change">未售价格变化 <b>{{ pricePercent > 0 ? '+' : '' }}{{ pricePercent }}%</b></label>
           <el-slider
             id="price-change"
             v-model="pricePercent"
@@ -147,8 +138,7 @@ const phases = computed(() => props.revision?.data.phases ?? []);
           />
         </div>
         <div class="parameter-field">
-          <label for="cost-change">剩余成本变化
-            <b>{{ costPercent > 0 ? "+" : "" }}{{ costPercent }}%</b></label>
+          <label for="cost-change">剩余成本变化 <b>{{ costPercent > 0 ? '+' : '' }}{{ costPercent }}%</b></label>
           <el-slider
             id="cost-change"
             v-model="costPercent"
@@ -212,9 +202,7 @@ const phases = computed(() => props.revision?.data.phases ?? []);
       </el-checkbox-group>
       <div class="boundary-note">
         <b>独立核算，按月汇总</b>
-        <p>
-          项目现金不默认互相调拨。资金缺口保留各项目风险，不能用另一项目盈余自动抵销。
-        </p>
+        <p>项目现金不默认互相调拨。资金缺口保留各项目风险，不能用另一项目盈余自动抵销。</p>
       </div>
       <p class="field-note">
         需要调整售价或成本时，切至对应单项目编辑；本次汇总使用各项目现有情景草稿。
@@ -229,9 +217,7 @@ const phases = computed(() => props.revision?.data.phases ?? []);
         class="generate-button"
         @click="emit('generate')"
       >
-        {{
-          state.mode === "portfolio" ? "生成项目汇总" : "生成情景预测"
-        }}
+        {{ state.mode === 'portfolio' ? '生成项目汇总' : '生成情景预测' }}
       </el-button>
       <RouterLink
         to="/data"

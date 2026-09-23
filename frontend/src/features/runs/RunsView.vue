@@ -1,69 +1,63 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
-import { api } from "../../api/client";
-import type { Comparison, Run } from "../../api/types";
-import { formatMoney, state } from "../../state";
-import { runLabels, scenarioLabels } from "../data/editor";
-const runs = ref<Run[]>([]);
-const kind = ref("all");
-const projectId = ref("");
-const loading = ref(false);
-const error = ref("");
-const left = ref("");
-const right = ref("");
-const comparison = ref<Comparison | null>(null);
+import { computed, onMounted, ref } from 'vue'
+import { api } from '../../api/client'
+import type { Comparison, Run } from '../../api/types'
+import { formatMoney, state } from '../../state'
+import { runLabels, scenarioLabels } from '../data/editor'
+const runs = ref<Run[]>([])
+const kind = ref('all')
+const projectId = ref('')
+const loading = ref(false)
+const error = ref('')
+const left = ref('')
+const right = ref('')
+const comparison = ref<Comparison | null>(null)
 const visible = computed(() =>
   runs.value.filter(
     (run) =>
-      (kind.value === "all" || run.kind === kind.value) &&
+      (kind.value === 'all' || run.kind === kind.value) &&
       (!projectId.value || run.project_ids.includes(projectId.value)),
   ),
-);
-const comparable = computed(() => runs.value.filter((run) => !!run.result));
+)
+const comparable = computed(() => runs.value.filter((run) => !!run.result))
 const rows = computed(
   () =>
     comparison.value?.months.map((month, index) => ({
       month,
       delta: comparison.value?.profit_deltas[index],
     })) ?? [],
-);
+)
 function label(run: Run) {
-  return (
-    run.project_names.join("、") +
-    " / " +
-    run.forecast_origin +
-    " / " +
-    run.id.slice(0, 8)
-  );
+  return run.project_names.join('、') + ' / ' + run.forecast_origin + ' / ' + run.id.slice(0, 8)
 }
 async function load() {
-  loading.value = true;
-  error.value = "";
+  loading.value = true
+  error.value = ''
   try {
-    runs.value = await api.runs();
+    runs.value = await api.runs()
   } catch (e) {
-    error.value = e instanceof Error ? e.message : String(e);
+    error.value = e instanceof Error ? e.message : String(e)
   } finally {
-    loading.value = false;
+    loading.value = false
   }
 }
 async function compare() {
   if (!left.value || !right.value || left.value === right.value) {
-    error.value = "请选择两次不同的已完成预测";
-    return;
+    error.value = '请选择两次不同的已完成预测'
+    return
   }
-  loading.value = true;
-  error.value = "";
-  comparison.value = null;
+  loading.value = true
+  error.value = ''
+  comparison.value = null
   try {
-    comparison.value = await api.compare(left.value, right.value);
+    comparison.value = await api.compare(left.value, right.value)
   } catch (e) {
-    error.value = e instanceof Error ? e.message : String(e);
+    error.value = e instanceof Error ? e.message : String(e)
   } finally {
-    loading.value = false;
+    loading.value = false
   }
 }
-onMounted(load);
+onMounted(load)
 </script>
 <template>
   <div class="page-heading">
@@ -122,9 +116,7 @@ onMounted(load);
       >
         <template #default="{ row }">
           <RouterLink :to="'/runs/' + row.id">
-            {{
-              row.project_names.join("、") || "未命名项目"
-            }}
+            {{ row.project_names.join('、') || '未命名项目' }}
           </RouterLink><small class="muted run-id">{{ row.id }}</small>
         </template>
       </el-table-column>
@@ -133,9 +125,7 @@ onMounted(load);
         width="100"
       >
         <template #default="{ row }">
-          {{
-            row.kind === "portfolio" ? "项目汇总" : "单项目"
-          }}
+          {{ row.kind === 'portfolio' ? '项目汇总' : '单项目' }}
         </template>
       </el-table-column>
       <el-table-column
@@ -153,9 +143,7 @@ onMounted(load);
         width="80"
       >
         <template #default="{ row }">
-          {{
-            scenarioLabels[row.scenario]
-          }}
+          {{ scenarioLabels[row.scenario] }}
         </template>
       </el-table-column>
       <el-table-column
@@ -163,9 +151,7 @@ onMounted(load);
         width="120"
       >
         <template #default="{ row }">
-          <el-tag
-            :type="row.result ? 'success' : row.error ? 'danger' : 'info'"
-          >
+          <el-tag :type="row.result ? 'success' : row.error ? 'danger' : 'info'">
             {{ runLabels[row.status] ?? row.status }}
           </el-tag>
         </template>
@@ -176,9 +162,7 @@ onMounted(load);
         align="right"
       >
         <template #default="{ row }">
-          {{
-            formatMoney(row.result?.summary.twelve_month_profit)
-          }}
+          {{ formatMoney(row.result?.summary.twelve_month_profit) }}
         </template>
       </el-table-column>
       <el-table-column
@@ -186,9 +170,7 @@ onMounted(load);
         min-width="160"
       >
         <template #default="{ row }">
-          {{
-            row.created_at.replace("T", " ").slice(0, 19)
-          }}
+          {{ row.created_at.replace('T', ' ').slice(0, 19) }}
         </template>
       </el-table-column>
     </el-table>
@@ -242,13 +224,9 @@ onMounted(load);
         <el-table-column
           prop="month"
           label="目标月份"
-        /><el-table-column
-          label="对照减原预测 · 利润变化（万元）"
-        >
+        /><el-table-column label="对照减原预测 · 利润变化（万元）">
           <template #default="{ row }">
-            {{
-              formatMoney(row.delta)
-            }}
+            {{ formatMoney(row.delta) }}
           </template>
         </el-table-column>
       </el-table>

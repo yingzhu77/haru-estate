@@ -1,33 +1,31 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { useRoute } from "vue-router";
-import { api } from "../../api/client";
-import type { Revision, Run } from "../../api/types";
-import { formatMoney, showEvidence } from "../../state";
-import { runLabels, scenarioLabels } from "../data/editor";
-const route = useRoute();
-const run = ref<Run | null>(null);
-const snapshots = ref<Revision[]>([]);
-const loading = ref(false);
-const resuming = ref(false);
-const error = ref("");
-const snapshotError = ref("");
-let sequence = 0;
-let timer: ReturnType<typeof setTimeout> | undefined;
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
+import { api } from '../../api/client'
+import type { Revision, Run } from '../../api/types'
+import { formatMoney, showEvidence } from '../../state'
+import { runLabels, scenarioLabels } from '../data/editor'
+const route = useRoute()
+const run = ref<Run | null>(null)
+const snapshots = ref<Revision[]>([])
+const loading = ref(false)
+const resuming = ref(false)
+const error = ref('')
+const snapshotError = ref('')
+let sequence = 0
+let timer: ReturnType<typeof setTimeout> | undefined
 const recoverable = computed(
-  () =>
-    !!run.value &&
-    ["interrupted", "failed", "incomplete"].includes(run.value.status),
-);
+  () => !!run.value && ['interrupted', 'failed', 'incomplete'].includes(run.value.status),
+)
 async function load(id: string, withSnapshots = false) {
-  const request = ++sequence;
-  if (timer) clearTimeout(timer);
-  loading.value = withSnapshots;
-  error.value = "";
+  const request = ++sequence
+  if (timer) clearTimeout(timer)
+  loading.value = withSnapshots
+  error.value = ''
   try {
-    const result = await api.run(id);
-    if (request !== sequence) return;
-    run.value = result;
+    const result = await api.run(id)
+    if (request !== sequence) return
+    run.value = result
     if (withSnapshots) {
       const pairs = result.members?.length
         ? result.members.map((member) => ({
@@ -37,60 +35,58 @@ async function load(id: string, withSnapshots = false) {
         : result.project_ids.map((projectId, index) => ({
             projectId,
             revisionId: result.revision_ids[index],
-          }));
+          }))
       const values = await Promise.allSettled(
         pairs
           .filter((pair) => pair.revisionId)
           .map((pair) => api.input(pair.projectId, pair.revisionId)),
-      );
-      if (request !== sequence) return;
+      )
+      if (request !== sequence) return
       snapshots.value = values.flatMap((value) =>
-        value.status === "fulfilled" ? [value.value] : [],
-      );
-      snapshotError.value = values.some((value) => value.status === "rejected")
-        ? "部分输入快照读取失败。未使用最新输入替代，请刷新重试。"
-        : "";
+        value.status === 'fulfilled' ? [value.value] : [],
+      )
+      snapshotError.value = values.some((value) => value.status === 'rejected')
+        ? '部分输入快照读取失败。未使用最新输入替代，请刷新重试。'
+        : ''
     }
-    if (["queued", "running", "waiting"].includes(result.status))
+    if (['queued', 'running', 'waiting'].includes(result.status))
       timer = setTimeout(() => {
-        void load(id);
-      }, 1500);
+        void load(id)
+      }, 1500)
   } catch (e) {
-    if (request === sequence)
-      error.value = e instanceof Error ? e.message : String(e);
+    if (request === sequence) error.value = e instanceof Error ? e.message : String(e)
   } finally {
-    if (request === sequence) loading.value = false;
+    if (request === sequence) loading.value = false
   }
 }
 async function resume() {
-  if (!run.value || resuming.value) return;
-  resuming.value = true;
-  error.value = "";
-  const id = run.value.id;
+  if (!run.value || resuming.value) return
+  resuming.value = true
+  error.value = ''
+  const id = run.value.id
   try {
-    await api.resume(id);
-    if (String(route.params.id) === id) await load(id);
+    await api.resume(id)
+    if (String(route.params.id) === id) await load(id)
   } catch (e) {
-    if (String(route.params.id) === id)
-      error.value = e instanceof Error ? e.message : String(e);
+    if (String(route.params.id) === id) error.value = e instanceof Error ? e.message : String(e)
   } finally {
-    resuming.value = false;
+    resuming.value = false
   }
 }
 watch(
   () => String(route.params.id),
   (id) => {
-    run.value = null;
-    snapshots.value = [];
-    snapshotError.value = "";
-    void load(id, true);
+    run.value = null
+    snapshots.value = []
+    snapshotError.value = ''
+    void load(id, true)
   },
   { immediate: true },
-);
+)
 onBeforeUnmount(() => {
-  ++sequence;
-  if (timer) clearTimeout(timer);
-});
+  ++sequence
+  if (timer) clearTimeout(timer)
+})
 </script>
 <template>
   <div class="page-heading">
@@ -122,12 +118,10 @@ onBeforeUnmount(() => {
     <section class="panel">
       <div class="page-heading">
         <h2>
-          {{ run.project_names.join("、") }} ·
-          {{ run.kind === "portfolio" ? "项目汇总" : "单项目预测" }}
+          {{ run.project_names.join('、') }} ·
+          {{ run.kind === 'portfolio' ? '项目汇总' : '单项目预测' }}
         </h2>
-        <el-tag
-          :type="run.result ? 'success' : run.error ? 'danger' : 'info'"
-        >
+        <el-tag :type="run.result ? 'success' : run.error ? 'danger' : 'info'">
           {{ runLabels[run.status] ?? run.status }}
         </el-tag>
       </div>
@@ -136,34 +130,22 @@ onBeforeUnmount(() => {
         border
       >
         <el-descriptions-item label="运行编号">
-          {{
-            run.id
-          }}
+          {{ run.id }}
         </el-descriptions-item>
         <el-descriptions-item label="预测基准">
-          {{
-            run.forecast_origin
-          }}
+          {{ run.forecast_origin }}
         </el-descriptions-item>
         <el-descriptions-item label="信息截止">
-          {{
-            run.information_cutoff
-          }}
+          {{ run.information_cutoff }}
         </el-descriptions-item>
         <el-descriptions-item label="创建时间">
-          {{
-            run.created_at
-          }}
+          {{ run.created_at }}
         </el-descriptions-item>
         <el-descriptions-item label="情景">
-          {{
-            scenarioLabels[run.scenario]
-          }}
+          {{ scenarioLabels[run.scenario] }}
         </el-descriptions-item>
         <el-descriptions-item label="尝试次数">
-          {{
-            run.attempt
-          }}
+          {{ run.attempt }}
         </el-descriptions-item>
       </el-descriptions>
       <p v-if="run.parent_id">
@@ -204,13 +186,9 @@ onBeforeUnmount(() => {
         <el-table-column
           prop="project_name"
           label="项目"
-        /><el-table-column
-          label="状态"
-        >
+        /><el-table-column label="状态">
           <template #default="{ row }">
-            {{
-              runLabels[row.status] ?? row.status
-            }}
+            {{ runLabels[row.status] ?? row.status }}
           </template>
         </el-table-column><el-table-column
           prop="revision_id"
@@ -218,16 +196,12 @@ onBeforeUnmount(() => {
           min-width="230"
         /><el-table-column label="12月利润（万元）">
           <template #default="{ row }">
-            {{
-              formatMoney(row.profit)
-            }}
+            {{ formatMoney(row.profit) }}
           </template>
         </el-table-column><el-table-column
           prop="error"
           label="缺项 / 错误"
-        /><el-table-column
-          label="下钻"
-        >
+        /><el-table-column label="下钻">
           <template #default="{ row }">
             <RouterLink :to="'/runs/' + row.run_id">
               绑定子运行 →
@@ -250,8 +224,7 @@ onBeforeUnmount(() => {
           :timestamp="step.created_at"
           placement="top"
         >
-          <strong>{{ step.name }} ·
-            {{ runLabels[step.status] ?? step.status }}</strong>
+          <strong>{{ step.name }} · {{ runLabels[step.status] ?? step.status }}</strong>
           <p>{{ step.message }}</p>
           <small class="muted">步骤 {{ step.sequence }} · 尝试 {{ step.attempt }}</small>
         </el-timeline-item>
@@ -272,29 +245,21 @@ onBeforeUnmount(() => {
         </el-button>
       </div>
       <p class="muted">
-        {{ run.result.profit_basis }} · {{ run.result.currency }} ·
-        展示单位：万元 · 规则 {{ run.result.rule_version }}
+        {{ run.result.profit_basis }} · {{ run.result.currency }} · 展示单位：万元 · 规则
+        {{ run.result.rule_version }}
       </p>
       <div class="summary-grid">
         <div>
-          <small>下月利润</small><strong>{{
-            formatMoney(run.result.summary.next_month_profit)
-          }}</strong>
+          <small>下月利润</small><strong>{{ formatMoney(run.result.summary.next_month_profit) }}</strong>
         </div>
         <div>
-          <small>未来12个月利润</small><strong>{{
-            formatMoney(run.result.summary.twelve_month_profit)
-          }}</strong>
+          <small>未来12个月利润</small><strong>{{ formatMoney(run.result.summary.twelve_month_profit) }}</strong>
         </div>
         <div>
-          <small>全周期利润</small><strong>{{
-            formatMoney(run.result.summary.lifecycle_profit)
-          }}</strong>
+          <small>全周期利润</small><strong>{{ formatMoney(run.result.summary.lifecycle_profit) }}</strong>
         </div>
         <div>
-          <small>最大未覆盖缺口</small><strong>{{
-            formatMoney(run.result.summary.max_funding_gap)
-          }}</strong>
+          <small>最大未覆盖缺口</small><strong>{{ formatMoney(run.result.summary.max_funding_gap) }}</strong>
         </div>
       </div>
       <el-alert
@@ -315,27 +280,19 @@ onBeforeUnmount(() => {
           width="100"
         /><el-table-column label="确认收入">
           <template #default="{ row }">
-            {{
-              formatMoney(row.revenue)
-            }}
+            {{ formatMoney(row.revenue) }}
           </template>
         </el-table-column><el-table-column label="结转成本">
           <template #default="{ row }">
-            {{
-              formatMoney(row.cogs)
-            }}
+            {{ formatMoney(row.cogs) }}
           </template>
         </el-table-column><el-table-column label="利润">
           <template #default="{ row }">
-            {{
-              formatMoney(row.profit)
-            }}
+            {{ formatMoney(row.profit) }}
           </template>
         </el-table-column><el-table-column label="净现金流">
           <template #default="{ row }">
-            {{
-              formatMoney(row.net_cash_flow)
-            }}
+            {{ formatMoney(row.net_cash_flow) }}
           </template>
         </el-table-column><el-table-column
           label="依据"
@@ -355,6 +312,11 @@ onBeforeUnmount(() => {
     </section>
     <section class="panel">
       <h2>不可变输入快照</h2>
+      <p v-if="run.supersedes_run_id">
+        <RouterLink :to="'/runs/' + run.supersedes_run_id">
+          查看关联的上次预测 →
+        </RouterLink>
+      </p>
       <el-alert
         v-if="snapshotError"
         :title="snapshotError"
@@ -364,6 +326,10 @@ onBeforeUnmount(() => {
       <p class="muted">
         下面是本次运行绑定的历史输入，可展开核对所有字段；编辑请前往数据管理创建新版本。
       </p>
+      <details>
+        <summary>本次运行的情景调整</summary>
+        <pre>{{ JSON.stringify(run.overrides, null, 2) }}</pre>
+      </details>
       <details
         v-for="snapshot in snapshots"
         :key="snapshot.id"

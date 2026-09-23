@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import type { components } from "../../api/schema";
-type Payment = components["schemas"]["Payment"];
-const props = defineProps<{ modelValue: Payment[]; label: string }>();
-const emit = defineEmits<{ "update:modelValue": [value: Payment[]] }>();
+import type { components } from '../../api/schema'
+type Payment = components['schemas']['Payment']
+const props = defineProps<{ modelValue: Payment[]; label: string }>()
+const emit = defineEmits<{ 'update:modelValue': [value: Payment[]] }>()
 function update(index: number, key: keyof Payment, value: string) {
   emit(
-    "update:modelValue",
+    'update:modelValue',
     props.modelValue.map((p, i) => (i === index ? { ...p, [key]: value } : p)),
-  );
+  )
 }
 </script>
 <template>
@@ -15,9 +15,7 @@ function update(index: number, key: keyof Payment, value: string) {
     <div class="toolbar">
       <strong>{{ label }}</strong><el-button
         size="small"
-        @click="
-          emit('update:modelValue', [...modelValue, { month: '', amount: '' }])
-        "
+        @click="emit('update:modelValue', [...modelValue, { month: '', amount: '' }])"
       >
         添加节点
       </el-button>
@@ -38,17 +36,13 @@ function update(index: number, key: keyof Payment, value: string) {
           :value="payment.month"
           type="month"
           :aria-label="label + '月份'"
-          @input="
-            update(index, 'month', ($event.target as HTMLInputElement).value)
-          "
+          @input="update(index, 'month', ($event.target as HTMLInputElement).value)"
         ></label>
       <label>金额（元）<input
         :value="payment.amount"
         inputmode="decimal"
         :aria-label="label + '金额'"
-        @input="
-          update(index, 'amount', ($event.target as HTMLInputElement).value)
-        "
+        @input="update(index, 'amount', ($event.target as HTMLInputElement).value)"
       ></label>
       <el-button
         type="danger"
