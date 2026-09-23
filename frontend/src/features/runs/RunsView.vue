@@ -1,63 +1,109 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { api } from '../../api/client'
 import type { Comparison, Run } from '../../api/types'
-import { formatMoney, state } from '../../state'
+import { formatMoney, showEvidence, state } from '../../state'
 import { runLabels, scenarioLabels } from '../data/editor'
 const runs = ref<Run[]>([])
-const kind = ref('all')
+const kind = ref<'all' | 'project' | 'portfolio'>('all')
 const projectId = ref('')
 const loading = ref(false)
 const error = ref('')
 const left = ref('')
 const right = ref('')
 const comparison = ref<Comparison | null>(null)
-const visible = computed(() =>
-  runs.value.filter(
-    (run) =>
-      (kind.value === 'all' || run.kind === kind.value) &&
-      (!projectId.value || run.project_ids.includes(projectId.value)),
-  ),
+const offset = ref(0)
+const total = ref(0)
+const selectedRuns = ref<Run[]>([])
+const comparing = ref(false)
+let loadGeneration = 0
+let compareGeneration = 0
+const comparable = computed(() => [
+  ...new Map(
+    [...selectedRuns.value, ...runs.value]
+      .filter((run) => !!run.result)
+      .map((run) => [run.id, run]),
+  ).values(),
+])
+const rows = computed(() =>
+  comparison.value
+    ? [
+        ...(comparison.value.bridge ?? []),
+        ...(comparison.value.total_bridge ? [comparison.value.total_bridge] : []),
+      ]
+    : [],
 )
-const comparable = computed(() => runs.value.filter((run) => !!run.result))
-const rows = computed(
-  () =>
-    comparison.value?.months.map((month, index) => ({
-      month,
-      delta: comparison.value?.profit_deltas[index],
-    })) ?? [],
-)
+const bridgeColumns = [
+  { key: 'revenue', label: '收入贡献' },
+  { key: 'cogs', label: '成本贡献' },
+  { key: 'expenses', label: '费用贡献' },
+  { key: 'taxes', label: '税费贡献' },
+  { key: 'interest', label: '利息贡献' },
+  { key: 'profit', label: '利润变化' },
+] as const
 function label(run: Run) {
   return run.project_names.join('、') + ' / ' + run.forecast_origin + ' / ' + run.id.slice(0, 8)
 }
 async function load() {
+  const generation = ++loadGeneration
   loading.value = true
+  runs.value = []
   error.value = ''
   try {
-    runs.value = await api.runs()
+    const result = await api.runPage({
+      projectId: projectId.value || undefined,
+      kind: kind.value === 'all' ? undefined : kind.value,
+      offset: offset.value,
+      limit: 20,
+    })
+    if (generation !== loadGeneration) return
+    runs.value = result.items
+    total.value = result.total
   } catch (e) {
-    error.value = e instanceof Error ? e.message : String(e)
+    if (generation === loadGeneration) error.value = e instanceof Error ? e.message : String(e)
   } finally {
-    loading.value = false
+    if (generation === loadGeneration) loading.value = false
   }
 }
+function turn(delta: number) {
+  offset.value += delta * 20
+  void load()
+}
+watch([kind, projectId], () => {
+  offset.value = 0
+  runs.value = []
+  total.value = 0
+  void load()
+})
+watch([left, right], () => {
+  selectedRuns.value = comparable.value.filter((run) => [left.value, right.value].includes(run.id))
+  ++compareGeneration
+  comparing.value = false
+  comparison.value = null
+})
 async function compare() {
   if (!left.value || !right.value || left.value === right.value) {
     error.value = '请选择两次不同的已完成预测'
     return
   }
-  loading.value = true
+  const generation = ++compareGeneration
+  comparing.value = true
   error.value = ''
   comparison.value = null
   try {
-    comparison.value = await api.compare(left.value, right.value)
+    const result = await api.compare(left.value, right.value)
+    if (generation === compareGeneration) comparison.value = result
   } catch (e) {
-    error.value = e instanceof Error ? e.message : String(e)
+    if (generation === compareGeneration) error.value = e instanceof Error ? e.message : String(e)
   } finally {
-    loading.value = false
+    if (generation === compareGeneration) comparing.value = false
   }
 }
 onMounted(load)
+onBeforeUnmount(() => {
+  ++loadGeneration
+  ++compareGeneration
+})
 </script>
 <template>
   <div class="page-heading">
@@ -92,6 +138,7 @@ onMounted(load)
         </el-radio-button>
       </el-radio-group><el-select
         v-model="projectId"
+        aria-label="历史项目筛选"
         clearable
         placeholder="按成员项目筛选"
         style="width: 260px"
@@ -106,7 +153,7 @@ onMounted(load)
     </div>
     <el-table
       v-loading="loading"
-      :data="visible"
+      :data="runs"
       row-key="id"
       empty-text="暂无运行，请先到工作台创建预测"
     >
@@ -174,6 +221,21 @@ onMounted(load)
         </template>
       </el-table-column>
     </el-table>
+    <div class="toolbar pagination">
+      <el-button
+        :disabled="loading || !offset"
+        @click="turn(-1)"
+      >
+        上一页预测
+      </el-button>
+      <span>第 {{ Math.floor(offset / 20) + 1 }} 页 · 共 {{ total }} 条</span>
+      <el-button
+        :disabled="loading || offset + 20 >= total"
+        @click="turn(1)"
+      >
+        下一页预测
+      </el-button>
+    </div>
   </section>
   <section class="panel compare-panel">
     <h2>对齐目标月份比较</h2>
@@ -183,6 +245,7 @@ onMounted(load)
     <div class="toolbar">
       <el-select
         v-model="left"
+        aria-label="原预测"
         placeholder="原预测"
         style="width: 340px"
       >
@@ -194,6 +257,7 @@ onMounted(load)
         />
       </el-select><span>→</span><el-select
         v-model="right"
+        aria-label="对照预测"
         placeholder="对照预测"
         style="width: 340px"
       >
@@ -205,13 +269,24 @@ onMounted(load)
         />
       </el-select><el-button
         type="primary"
-        :loading="loading"
+        :loading="comparing"
         @click="compare"
       >
         比较共同月份
       </el-button>
     </div>
     <template v-if="comparison">
+      <p class="muted">
+        下表为程序按利润组成项计算的差额分解，不代表因果归因。收入增加为正贡献，成本和费用增加为负贡献；单位：万元。比较只覆盖共同月份。
+      </p>
+      <div class="toolbar">
+        <el-button @click="showEvidence(comparison.left_id, 'twelve_month_profit')">
+          查看原预测来源
+        </el-button>
+        <el-button @click="showEvidence(comparison.right_id, 'twelve_month_profit')">
+          查看对照预测来源
+        </el-button>
+      </div>
       <el-alert
         v-if="comparison.membership_changed"
         title="成员范围发生变化，利润差额同时包含项目范围变化，不能全部解释为经营改善。"
@@ -224,9 +299,36 @@ onMounted(load)
         <el-table-column
           prop="month"
           label="目标月份"
-        /><el-table-column label="对照减原预测 · 利润变化（万元）">
+        /><el-table-column
+          v-for="column in bridgeColumns"
+          :key="column.key"
+          :label="column.label"
+          align="right"
+          min-width="100"
+        >
           <template #default="{ row }">
-            {{ formatMoney(row.delta) }}
+            {{ formatMoney(row[column.key]) }}
+          </template>
+        </el-table-column>
+        <el-table-column
+          label="当月来源"
+          min-width="150"
+        >
+          <template #default="{ row }">
+            <template v-if="comparison.months.includes(row.month)">
+              <el-button
+                link
+                @click="showEvidence(comparison.left_id, 'profit', row.month)"
+              >
+                原预测
+              </el-button>
+              <el-button
+                link
+                @click="showEvidence(comparison.right_id, 'profit', row.month)"
+              >
+                对照
+              </el-button>
+            </template>
           </template>
         </el-table-column>
       </el-table>
@@ -241,6 +343,9 @@ onMounted(load)
 }
 .compare-panel {
   margin-top: 18px;
+}
+.pagination {
+  margin-top: 16px;
 }
 .compare-panel p {
   font-size: 12px;

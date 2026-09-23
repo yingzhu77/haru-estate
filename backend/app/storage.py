@@ -40,6 +40,14 @@ class RunRow(Base):
     result: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
 
+class MutationRow(Base):
+    __tablename__ = "mutation_receipts"
+    key: Mapped[str] = mapped_column(String, primary_key=True)
+    operation: Mapped[str]
+    request_hash: Mapped[str]
+    response: Mapped[dict[str, Any]] = mapped_column(JSON)
+
+
 def make_engine(path: Path) -> Engine:
     engine = create_engine(
         f"sqlite:///{path.as_posix()}", connect_args={"check_same_thread": False, "timeout": 15}

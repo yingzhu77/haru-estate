@@ -87,20 +87,31 @@ def calculate(
     result.summary.range_low = money(min(D(v) for v in totals.values()))
     result.summary.range_high = money(max(D(v) for v in totals.values()))
     for label, changes in (
-        ("未售售价 +5%", {"price_change": str(D(override.price_change) + D(".05"))}),
         (
-            "剩余成本 +5%",
+            "未售售价调整幅度 +5 个百分点",
+            {"price_change": str(D(override.price_change) + D(".05"))},
+        ),
+        (
+            "剩余成本调整幅度 +5 个百分点",
             {"remaining_cost_change": str(D(override.remaining_cost_change) + D(".05"))},
         ),
         ("回款延后 1 月", {"collection_delay": override.collection_delay + 1}),
     ):
-        variant = override.model_copy(update=changes)
-        value = _calculate(data, origin, cutoff, scenario, variant).summary.twelve_month_profit
+        try:
+            variant = Overrides.model_validate({**override.model_dump(), **changes})
+            summary = _calculate(data, origin, cutoff, scenario, variant).summary
+        except ValueError as exc:
+            result.sensitivity.append(Sensitivity(label=label, error=str(exc)))
+            continue
         result.sensitivity.append(
             Sensitivity(
                 label=label,
-                profit=value,
-                delta=money(D(value) - D(result.summary.twelve_month_profit)),
+                profit=summary.twelve_month_profit,
+                delta=money(D(summary.twelve_month_profit) - D(result.summary.twelve_month_profit)),
+                max_funding_gap=summary.max_funding_gap,
+                funding_gap_delta=money(
+                    D(summary.max_funding_gap) - D(result.summary.max_funding_gap)
+                ),
             )
         )
     return result

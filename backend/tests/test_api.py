@@ -19,7 +19,11 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClie
 
 def test_real_api_project_run_evidence_and_portfolio(client: TestClient) -> None:
     assert client.get("/api/v1/health").json()["ai"] == "not_connected"
-    created = client.post("/api/v1/projects", json={"name": "第三模拟住宅", "template": "demo"})
+    created = client.post(
+        "/api/v1/projects",
+        json={"name": "第三模拟住宅", "template": "demo"},
+        headers={"Idempotency-Key": "create-api-project"},
+    )
     assert created.status_code == 200
     project = created.json()
     body = {"project_ids": [project["id"]]}
@@ -52,7 +56,9 @@ def test_real_api_project_run_evidence_and_portfolio(client: TestClient) -> None
 
 
 def test_validation_errors_have_contract_and_do_not_create_runs(client: TestClient) -> None:
-    invalid = client.post("/api/v1/projects", json={"name": "  "})
+    invalid = client.post(
+        "/api/v1/projects", json={"name": "  "}, headers={"Idempotency-Key": "invalid-api-project"}
+    )
     assert invalid.status_code == 422 and invalid.json()["code"] == "VALIDATION_ERROR"
     project = client.get("/api/v1/projects").json()[0]
     invalid = client.post(
@@ -66,3 +72,65 @@ def test_validation_errors_have_contract_and_do_not_create_runs(client: TestClie
     )
     assert invalid.status_code == 422
     assert client.get("/api/v1/runs").json() == []
+
+
+def test_input_mutation_retry_and_structured_import_rejection(client: TestClient) -> None:
+    headers = {"Idempotency-Key": "http-project-retry"}
+    body = {"name": "HTTP重试模拟", "template": "demo"}
+    first = client.post("/api/v1/projects", json=body, headers=headers)
+    assert first.headers["X-Request-ID"]
+    assert client.post("/api/v1/projects", json=body, headers=headers).json() == first.json()
+    project = first.json()
+    revision = client.get(f"/api/v1/projects/{project['id']}/input").json()
+    invalid = {
+        "base_version": 1,
+        "known_on": "2026-08-31",
+        "records": [
+            {
+                "id": "invalid-http",
+                "phase_id": revision["data"]["phases"][0]["id"],
+                "month": "2026-08",
+                "known_on": "2026-08-31",
+                "metric": "collections",
+                "amount": "1",
+                "contract_id": "nonexistent",
+            }
+        ],
+    }
+    rejected = client.post(
+        f"/api/v1/projects/{project['id']}/imports/confirm",
+        json=invalid,
+        headers={"Idempotency-Key": "invalid-csv-import"},
+    )
+    assert rejected.status_code == 422
+    assert rejected.json()["code"] == "VALIDATION_ERROR"
+    assert rejected.json()["request_id"] == rejected.headers["X-Request-ID"]
+    assert client.get(f"/api/v1/projects/{project['id']}/input").json() == revision
+    page = client.get(f"/api/v1/projects/{project['id']}/revisions").json()
+    assert page["total"] == 1 and "data" not in page["items"][0]
+    assert client.get("/api/v1/runs/page?limit=0").status_code == 422
+
+
+def test_unexpected_error_has_request_id_without_internal_details(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail() -> None:
+        raise RuntimeError("private internal detail")
+
+    monkeypatch.setattr(application.service, "health", fail)
+    result = client.get("/api/v1/health")
+    assert result.status_code == 500
+    assert result.json()["code"] == "INTERNAL_ERROR"
+    assert result.json()["request_id"] == result.headers["X-Request-ID"]
+    assert "private internal detail" not in result.text
+
+
+def test_missing_route_and_missing_mutation_key_follow_error_contract(client: TestClient) -> None:
+    missing = client.get("/api/v1/no-such-route")
+    assert missing.status_code == 404
+    assert missing.json()["request_id"] == missing.headers["X-Request-ID"]
+    rejected = client.post("/api/v1/projects", json={"name": "缺少请求键"})
+    assert rejected.status_code == 422
+    assert rejected.json()["code"] == "VALIDATION_ERROR"
+    assert len(client.get("/api/v1/projects").json()) == 2

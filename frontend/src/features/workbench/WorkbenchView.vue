@@ -612,7 +612,7 @@ onBeforeRouteLeave(async () => {
     <el-drawer
       v-model="sensitivityOpen"
       title="情景与敏感性分析"
-      size="520px"
+      size="min(860px, 95vw)"
     >
       <template v-if="result">
         <p class="drawer-lead">
@@ -632,9 +632,14 @@ onBeforeRouteLeave(async () => {
           情景范围反映假设变化，不是预测准确率或统计置信区间。
         </p>
         <h3>单因素敏感性</h3>
+        <p class="drawer-note">
+          利润比较未来12个月；资金缺口比较预测起始月至全周期末的峰值。缺口变化为正表示资金压力增加。
+          项目汇总请进入绑定子项目查看敏感性，不相加各项目缺口峰值。旧运行未保存的分析列显示“—”。
+        </p>
         <el-table
           :data="result.sensitivity"
           size="small"
+          empty-text="该运行未保存单项目敏感性，请查看绑定子项目或创建新预测"
         >
           <el-table-column
             prop="label"
@@ -649,12 +654,41 @@ onBeforeRouteLeave(async () => {
               {{ formatMoney(row.profit) }}
             </template>
           </el-table-column><el-table-column
-            label="影响金额"
+            label="利润变化"
             align="right"
             width="110"
           >
             <template #default="{ row }">
               <span :class="{ negative: Number(row.delta) < 0 }">{{ Number(row.delta) > 0 ? '+' : '' }}{{ formatMoney(row.delta) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column
+            label="资金缺口峰值"
+            width="125"
+            align="right"
+          >
+            <template #default="{ row }">
+              {{ formatMoney(row.max_funding_gap) }}
+            </template>
+          </el-table-column>
+          <el-table-column
+            label="缺口变化"
+            width="115"
+            align="right"
+          >
+            <template #default="{ row }">
+              <span :class="{ negative: Number(row.funding_gap_delta) > 0 }">{{ Number(row.funding_gap_delta) > 0 ? '+' : ''
+              }}{{ formatMoney(row.funding_gap_delta) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column
+            label="状态"
+            min-width="140"
+          >
+            <template #default="{ row }">
+              {{
+                row.error ? '不可计算：' + row.error : '已保存'
+              }}
             </template>
           </el-table-column>
         </el-table>

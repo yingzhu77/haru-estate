@@ -12,48 +12,91 @@ import type {
   RevisionComparison,
 } from './types'
 type S = components['schemas']
+
+export class ApiRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code: string,
+    readonly requestId?: string,
+  ) {
+    super(requestId ? `${message}（请求编号：${requestId}）` : message)
+    this.name = 'ApiRequestError'
+  }
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers)
   if (init.body && !(init.body instanceof FormData)) headers.set('Content-Type', 'application/json')
   const response = await fetch(`/api/v1${path}`, { ...init, headers })
   if (!response.ok) {
     const error = await response.json().catch(() => ({ message: `HTTP ${response.status}` }))
-    throw new Error(error.message || error.detail || `HTTP ${response.status}`)
+    throw new ApiRequestError(
+      error.message || error.detail || `HTTP ${response.status}`,
+      response.status,
+      error.code || 'HTTP_ERROR',
+      error.request_id || response.headers.get('X-Request-ID') || undefined,
+    )
   }
   return response.json() as Promise<T>
 }
+
+// Keep the key for an uncertain outcome, including a dropped success response.
+// Only keys/fingerprints live in memory; business drafts are not copied to browser storage.
+const pendingMutations = new Map<string, string>()
+async function mutate<T>(path: string, method: string, body: unknown): Promise<T> {
+  const serialized = JSON.stringify(body)
+  const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(serialized))
+  const fingerprint = `${method}:${path}:${Array.from(new Uint8Array(hash), (b) => b.toString(16).padStart(2, '0')).join('')}`
+  const key = pendingMutations.get(fingerprint) ?? crypto.randomUUID()
+  pendingMutations.set(fingerprint, key)
+  try {
+    const result = await request<T>(path, {
+      method,
+      body: serialized,
+      headers: { 'Idempotency-Key': key },
+    })
+    pendingMutations.delete(fingerprint)
+    return result
+  } catch (error) {
+    // Validation/conflict is a definitive rejection. Transport/5xx outcomes remain retryable.
+    if (error instanceof ApiRequestError && error.status >= 400 && error.status < 500) {
+      pendingMutations.delete(fingerprint)
+    }
+    throw error
+  }
+}
 export const api = {
   projects: () => request<Project[]>('/projects'),
-  createProject: (body: S['ProjectCreate']) =>
-    request<Project>('/projects', { method: 'POST', body: JSON.stringify(body) }),
+  createProject: (body: S['ProjectCreate']) => mutate<Project>('/projects', 'POST', body),
   patchProject: (id: string, body: S['ProjectPatch']) =>
-    request<Project>(`/projects/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+    mutate<Project>(`/projects/${id}`, 'PATCH', body),
   input: (id: string, revisionId?: string) =>
     request<Revision>(
       `/projects/${id}/input${revisionId ? `?revision_id=${encodeURIComponent(revisionId)}` : ''}`,
     ),
   revise: (id: string, body: S['RevisionWrite']) =>
-    request<Revision>(`/projects/${id}/revisions`, { method: 'POST', body: JSON.stringify(body) }),
+    mutate<Revision>(`/projects/${id}/revisions`, 'POST', body),
   previewImport: (id: string, file: File) => {
     const body = new FormData()
     body.append('file', file)
     return request<ImportPreview>(`/projects/${id}/imports/preview`, { method: 'POST', body })
   },
   confirmImport: (id: string, body: S['ImportConfirm']) =>
-    request<Revision>(`/projects/${id}/imports/confirm`, {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }),
+    mutate<Revision>(`/projects/${id}/imports/confirm`, 'POST', body),
   createRun: (body: RunCreate, key: string = crypto.randomUUID()) =>
     request<Run>('/runs', {
       method: 'POST',
       headers: { 'Idempotency-Key': key },
       body: JSON.stringify(body),
     }),
-  runs: (projectId?: string) =>
-    request<Run[]>(`/runs${projectId ? `?project_id=${encodeURIComponent(projectId)}` : ''}`),
-  scopeRuns: (ids: string[]) =>
-    request<Run[]>(`/runs?scope_ids=${encodeURIComponent([...ids].sort().join(','))}`),
+  runs: (projectId?: string, scopeIds?: string[], kind?: 'project' | 'portfolio') => {
+    const params = new URLSearchParams()
+    if (projectId) params.set('project_id', projectId)
+    if (scopeIds) params.set('scope_ids', [...scopeIds].sort().join(','))
+    if (kind) params.set('kind', kind)
+    return request<Run[]>(`/runs?${params}`)
+  },
   runPage: (
     options: {
       projectId?: string

@@ -13,12 +13,15 @@ from uuid import uuid4
 import pandas as pd
 from alembic.config import Config
 from fastapi import HTTPException
-from sqlalchemy import select, text
+from pydantic import ValidationError
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from alembic import command
 from app import schemas as s
-from app.domain import D, aggregate, calculate, money
+from app.domain import D, aggregate, calculate
+from app.mutations import remember, replay
+from app.revision_diff import dataset_changes
 from app.seeds import demo_dataset
 from app.storage import ProjectRow, RevisionRow, RunRow, make_engine
 
@@ -76,7 +79,9 @@ class Service:
         with Session(self.engine) as db:
             return [s.Project.model_validate(r.payload) for r in db.scalars(select(ProjectRow))]
 
-    def create_project(self, body: s.ProjectCreate, variant: int = 0) -> s.Project:
+    def create_project(
+        self, body: s.ProjectCreate, variant: int = 0, *, key: str | None = None
+    ) -> s.Project:
         project_id, revision_id = str(uuid4()), str(uuid4())
         data = demo_dataset(variant) if body.template == "demo" else s.Dataset()
         created = now()
@@ -99,6 +104,9 @@ class Service:
             data=data,
         )
         with self.lock, Session(self.engine) as db, db.begin():
+            cached = replay(db, key, "create-project", body)
+            if cached is not None:
+                return s.Project.model_validate(cached)
             db.add(ProjectRow(id=project_id, version=1, payload=project.model_dump(mode="json")))
             db.flush()
             db.add(
@@ -110,10 +118,17 @@ class Service:
                     payload=revision.model_dump(mode="json"),
                 )
             )
+            remember(db, key, "create-project", body, project)
         return project
 
-    def patch_project(self, project_id: str, body: s.ProjectPatch) -> s.Project:
+    def patch_project(
+        self, project_id: str, body: s.ProjectPatch, *, key: str | None = None
+    ) -> s.Project:
         with self.lock, Session(self.engine) as db, db.begin():
+            operation = f"patch-project:{project_id}"
+            cached = replay(db, key, operation, body)
+            if cached is not None:
+                return s.Project.model_validate(cached)
             row = require(db.get(ProjectRow, project_id), "项目不存在")
             if row.version != body.base_version:
                 raise HTTPException(409, "项目版本已变化，请重新核对")
@@ -143,7 +158,9 @@ class Service:
                 "version": row.version,
                 "revision_id": revision_id,
             }
-            return s.Project.model_validate(row.payload)
+            result = s.Project.model_validate(row.payload)
+            remember(db, key, operation, body, result)
+            return result
 
     def revision(self, project_id: str, revision_id: str | None = None) -> s.Revision:
         with Session(self.engine) as db:
@@ -155,34 +172,76 @@ class Service:
                 raise HTTPException(404, "版本不属于该项目")
             return s.Revision.model_validate(row.payload)
 
-    def revise(self, project_id: str, body: s.RevisionWrite) -> s.Revision:
+    def revise(
+        self, project_id: str, body: s.RevisionWrite, *, key: str | None = None
+    ) -> s.Revision:
         with self.lock, Session(self.engine) as db, db.begin():
-            row = require(db.get(ProjectRow, project_id), "项目不存在")
-            if row.version != body.base_version:
-                raise HTTPException(409, "数据已被修订；保留草稿并重新核对基础版本")
-            if row.payload["archived"]:
-                raise HTTPException(409, "归档项目不能修改")
-            revision = s.Revision(
-                id=str(uuid4()),
-                project_id=project_id,
-                version=row.version + 1,
-                known_on=body.known_on.isoformat(),
-                created_at=now(),
-                note=body.note,
-                data=body.data,
-            )
-            db.add(
-                RevisionRow(
-                    id=revision.id,
-                    project_id=project_id,
-                    version=revision.version,
-                    known_on=revision.known_on,
-                    payload=revision.model_dump(mode="json"),
-                )
-            )
-            row.version = revision.version
-            row.payload = {**row.payload, "version": revision.version, "revision_id": revision.id}
+            operation = f"revise:{project_id}"
+            cached = replay(db, key, operation, body)
+            if cached is not None:
+                return s.Revision.model_validate(cached)
+            revision = self._write_revision(db, project_id, body)
+            remember(db, key, operation, body, revision)
             return revision
+
+    def _write_revision(self, db: Session, project_id: str, body: s.RevisionWrite) -> s.Revision:
+        row = require(db.get(ProjectRow, project_id), "项目不存在")
+        if row.version != body.base_version:
+            raise HTTPException(409, "数据已被修订；保留草稿并重新核对基础版本")
+        if row.payload["archived"]:
+            raise HTTPException(409, "归档项目不能修改")
+        revision = s.Revision(
+            id=str(uuid4()),
+            project_id=project_id,
+            version=row.version + 1,
+            known_on=body.known_on.isoformat(),
+            created_at=now(),
+            note=body.note,
+            data=body.data,
+        )
+        db.add(
+            RevisionRow(
+                id=revision.id,
+                project_id=project_id,
+                version=revision.version,
+                known_on=revision.known_on,
+                payload=revision.model_dump(mode="json"),
+            )
+        )
+        row.version = revision.version
+        row.payload = {**row.payload, "version": revision.version, "revision_id": revision.id}
+        return revision
+
+    def revisions(self, project_id: str, *, offset: int = 0, limit: int = 20) -> s.RevisionPage:
+        with Session(self.engine) as db:
+            require(db.get(ProjectRow, project_id), "项目不存在")
+            query = select(RevisionRow).where(RevisionRow.project_id == project_id)
+            total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
+            rows = db.scalars(
+                query.order_by(RevisionRow.version.desc()).offset(offset).limit(limit)
+            )
+            return s.RevisionPage(
+                items=[
+                    s.RevisionInfo.model_validate(
+                        {k: v for k, v in row.payload.items() if k != "data"}
+                    )
+                    for row in rows
+                ],
+                total=total,
+                offset=offset,
+                limit=limit,
+            )
+
+    def compare_revisions(
+        self, project_id: str, left_id: str, right_id: str
+    ) -> s.RevisionComparison:
+        left, right = self.revision(project_id, left_id), self.revision(project_id, right_id)
+        return s.RevisionComparison(
+            project_id=project_id,
+            left_id=left_id,
+            right_id=right_id,
+            changes=dataset_changes(left.data, right.data),
+        )
 
     def preview_import(self, project_id: str, data: bytes) -> s.ImportPreview:
         revision = self.revision(project_id)
@@ -205,12 +264,18 @@ class Service:
             if len(frame) > 5000:
                 raise ValueError("CSV最多5000行")
             existing = {r.id: r for r in revision.data.actuals}
+            contracts = {c.id: c for c in revision.data.contracts}
             for index, row in enumerate(frame.to_dict(orient="records"), start=2):
                 try:
                     payload = {str(k): v for k, v in row.items() if v != ""}
                     record = s.Actual.model_validate(payload)
                     if record.phase_id not in {p.id for p in revision.data.phases}:
                         raise ValueError("分期不属于当前项目")
+                    if record.contract_id and (
+                        record.contract_id not in contracts
+                        or contracts[record.contract_id].phase_id != record.phase_id
+                    ):
+                        raise ValueError("实际记录关联的合同不属于对应分期")
                     if record.id in existing:
                         if record != existing[record.id]:
                             raise ValueError("相同编号有不同内容，请通过修订编辑")
@@ -224,9 +289,19 @@ class Service:
             result.errors.append(str(exc))
         return result
 
-    def confirm_import(self, project_id: str, body: s.ImportConfirm) -> s.Revision:
-        with self.lock:
-            revision = self.revision(project_id)
+    def confirm_import(
+        self, project_id: str, body: s.ImportConfirm, *, key: str | None = None
+    ) -> s.Revision:
+        with self.lock, Session(self.engine) as db, db.begin():
+            operation = f"confirm-import:{project_id}"
+            cached = replay(db, key, operation, body)
+            if cached is not None:
+                return s.Revision.model_validate(cached)
+            project = require(db.get(ProjectRow, project_id), "项目不存在")
+            if project.payload["archived"]:
+                raise HTTPException(409, "归档项目不能导入")
+            row = require(db.get(RevisionRow, project.payload["revision_id"]), "版本不存在")
+            revision = s.Revision.model_validate(row.payload)
             if revision.version != body.base_version:
                 raise HTTPException(409, "导入预览后数据已变化，请重新预览")
             existing = {r.id: r for r in revision.data.actuals}
@@ -235,11 +310,17 @@ class Service:
                     raise HTTPException(409, "记录编号相同但内容不同")
                 existing[record.id] = record
             if list(existing.values()) == revision.data.actuals:
+                remember(db, key, operation, body, revision)
                 return revision
-            data = s.Dataset.model_validate(
-                {**revision.data.model_dump(), "actuals": list(existing.values())}
-            )
-            return self.revise(
+            try:
+                data = s.Dataset.model_validate(
+                    {**revision.data.model_dump(), "actuals": list(existing.values())}
+                )
+            except ValidationError as exc:
+                message = "; ".join(error["msg"] for error in exc.errors())
+                raise HTTPException(422, message) from exc
+            saved = self._write_revision(
+                db,
                 project_id,
                 s.RevisionWrite(
                     base_version=body.base_version,
@@ -248,6 +329,8 @@ class Service:
                     data=data,
                 ),
             )
+            remember(db, key, operation, body, saved)
+            return saved
 
     def _event(self, row: RunRow, name: str, status: str, message: str) -> None:
         steps = row.payload.get("steps", [])
@@ -382,18 +465,56 @@ class Service:
         with Session(self.engine) as db:
             return self._view(db, require(db.get(RunRow, run_id), "运行不存在"))
 
-    def runs(self, project_id: str | None = None) -> list[s.Run]:
+    def runs(self, project_id: str | None = None, *, scope_ids: str | None = None) -> list[s.Run]:
+        return self.run_page(project_id, limit=100, scope_ids=scope_ids).items
+
+    def run_page(
+        self,
+        project_id: str | None = None,
+        *,
+        kind: str | None = None,
+        offset: int = 0,
+        limit: int = 20,
+        scope_ids: str | None = None,
+    ) -> s.RunPage:
         with Session(self.engine) as db:
-            rows = db.scalars(select(RunRow).order_by(RunRow.created_at.desc()).limit(100))
-            return [
-                self._view(db, row)
-                for row in rows
-                if (
-                    project_id in row.payload["project_ids"]
-                    if project_id
-                    else not row.payload.get("parent_id")
+            query = select(RunRow).where(RunRow.payload["parent_id"].as_string().is_(None))
+            if project_id:
+                query = query.where(
+                    text(
+                        "EXISTS (SELECT 1 FROM json_each(runs.payload, '$.project_ids') "
+                        "WHERE value = :project_id)"
+                    ).bindparams(project_id=project_id)
                 )
-            ]
+            if kind:
+                query = query.where(RunRow.kind == kind)
+            if scope_ids is not None:
+                ids = sorted(set(scope_ids.split(",")))
+                if len(ids) > 50 or any(not project for project in ids):
+                    raise HTTPException(422, "查询范围须为1至50个项目编号")
+                query = query.where(
+                    func.json_array_length(RunRow.payload["project_ids"]) == len(ids)
+                )
+                for index, project in enumerate(ids):
+                    parameter = f"scope_{index}"
+                    query = query.where(
+                        text(
+                            "EXISTS (SELECT 1 FROM json_each(runs.payload, '$.project_ids') "
+                            f"WHERE value = :{parameter})"
+                        ).bindparams(**{parameter: project})
+                    )
+            total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
+            rows = db.scalars(
+                query.order_by(RunRow.created_at.desc(), RunRow.id.desc())
+                .offset(offset)
+                .limit(limit)
+            )
+            return s.RunPage(
+                items=[self._view(db, row) for row in rows],
+                total=total,
+                offset=offset,
+                limit=limit,
+            )
 
     def resume(self, run_id: str) -> s.Run:
         with self.lock, Session(self.engine) as db, db.begin():
@@ -545,20 +666,23 @@ class Service:
         )
 
     def compare(self, left_id: str, right_id: str) -> s.Comparison:
+        from app.domain_analysis import compare_results
+
         left, right = self.run(left_id), self.run(right_id)
         if not left.result or not right.result:
             raise HTTPException(409, "仅可比较完整结果")
-        if left.result.profit_basis != right.result.profit_basis:
-            raise HTTPException(409, "利润口径不同")
-        months = sorted(set(left.result.target_months) & set(right.result.target_months))
-        lvalues = {r.month: D(r.profit) for r in left.result.months}
-        rvalues = {r.month: D(r.profit) for r in right.result.months}
+        try:
+            bridge, total = compare_results(left.result, right.result)
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
         return s.Comparison(
             left_id=left_id,
             right_id=right_id,
-            months=months,
-            profit_deltas=[money(rvalues[m] - lvalues[m]) for m in months],
+            months=[row.month for row in bridge],
+            profit_deltas=[row.profit for row in bridge],
             membership_changed=set(left.project_ids) != set(right.project_ids),
+            bridge=bridge,
+            total_bridge=total,
         )
 
 

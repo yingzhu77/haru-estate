@@ -1,10 +1,15 @@
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from uuid import uuid4
 
-from fastapi import FastAPI, Header, HTTPException, Query, UploadFile
+from fastapi import FastAPI, Header, Query, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException
+from starlette.middleware.base import RequestResponseEndpoint
 from starlette.requests import Request
+from starlette.responses import Response
 
 from app import schemas as s
 
@@ -18,36 +23,62 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     service.stop()
 
 
-app = FastAPI(title="HaruEstate", version="0.1.0", lifespan=lifespan)
+app = FastAPI(
+    title="HaruEstate",
+    version="0.1.0",
+    lifespan=lifespan,
+    responses={status: {"model": s.ApiError} for status in (400, 404, 409, 413, 422, 500)},
+)
 
 
 @app.exception_handler(HTTPException)
-async def http_error(_: Request, exc: HTTPException) -> JSONResponse:
-    from uuid import uuid4
-
+async def http_error(request: Request, exc: HTTPException) -> JSONResponse:
     return JSONResponse(
         status_code=exc.status_code,
         content={
-            "code": "CONFLICT" if exc.status_code == 409 else "REQUEST_ERROR",
+            "code": (
+                "CONFLICT"
+                if exc.status_code == 409
+                else "VALIDATION_ERROR"
+                if exc.status_code == 422
+                else "REQUEST_ERROR"
+            ),
             "message": str(exc.detail),
-            "request_id": str(uuid4()),
+            "request_id": request.state.request_id,
         },
     )
 
 
 @app.exception_handler(RequestValidationError)
-async def validation_error(_: Request, exc: RequestValidationError) -> JSONResponse:
-    from uuid import uuid4
-
+async def validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
     messages = "; ".join(str(e["msg"]) for e in exc.errors())
     return JSONResponse(
         status_code=422,
         content={
             "code": "VALIDATION_ERROR",
             "message": messages,
-            "request_id": str(uuid4()),
+            "request_id": request.state.request_id,
         },
     )
+
+
+@app.middleware("http")
+async def request_context(request: Request, call_next: RequestResponseEndpoint) -> Response:
+    request.state.request_id = str(uuid4())
+    try:
+        response = await call_next(request)
+    except Exception:
+        logging.getLogger(__name__).exception("Request failed: %s", request.state.request_id)
+        response = JSONResponse(
+            status_code=500,
+            content={
+                "code": "INTERNAL_ERROR",
+                "message": "服务执行失败，请凭请求编号核查后重试",
+                "request_id": request.state.request_id,
+            },
+        )
+    response.headers["X-Request-ID"] = request.state.request_id
+    return response
 
 
 @app.get("/api/v1/health")
@@ -66,17 +97,23 @@ def projects() -> object:
 
 
 @app.post("/api/v1/projects", response_model=s.Project)
-def create_project(body: s.ProjectCreate) -> object:
+def create_project(
+    body: s.ProjectCreate, idempotency_key: str = Header(min_length=8, max_length=128)
+) -> object:
     from app.application import service
 
-    return service.create_project(body)
+    return service.create_project(body, key=idempotency_key)
 
 
 @app.patch("/api/v1/projects/{project_id}", response_model=s.Project)
-def patch_project(project_id: str, body: s.ProjectPatch) -> object:
+def patch_project(
+    project_id: str,
+    body: s.ProjectPatch,
+    idempotency_key: str = Header(min_length=8, max_length=128),
+) -> object:
     from app.application import service
 
-    return service.patch_project(project_id, body)
+    return service.patch_project(project_id, body, key=idempotency_key)
 
 
 @app.get("/api/v1/projects/{project_id}/input", response_model=s.Revision)
@@ -87,10 +124,14 @@ def project_input(project_id: str, revision_id: str | None = None) -> object:
 
 
 @app.post("/api/v1/projects/{project_id}/revisions", response_model=s.Revision)
-def revise(project_id: str, body: s.RevisionWrite) -> object:
+def revise(
+    project_id: str,
+    body: s.RevisionWrite,
+    idempotency_key: str = Header(min_length=8, max_length=128),
+) -> object:
     from app.application import service
 
-    return service.revise(project_id, body)
+    return service.revise(project_id, body, key=idempotency_key)
 
 
 @app.get("/api/v1/projects/{project_id}/revisions", response_model=s.RevisionPage)
@@ -118,24 +159,34 @@ async def preview_import(project_id: str, file: UploadFile) -> object:
 
 
 @app.post("/api/v1/projects/{project_id}/imports/confirm", response_model=s.Revision)
-def confirm_import(project_id: str, body: s.ImportConfirm) -> object:
+def confirm_import(
+    project_id: str,
+    body: s.ImportConfirm,
+    idempotency_key: str = Header(min_length=8, max_length=128),
+) -> object:
     from app.application import service
 
-    return service.confirm_import(project_id, body)
+    return service.confirm_import(project_id, body, key=idempotency_key)
 
 
 @app.post("/api/v1/runs", response_model=s.Run, status_code=202)
-def create_run(body: s.RunCreate, idempotency_key: str = Header(min_length=8)) -> object:
+def create_run(
+    body: s.RunCreate, idempotency_key: str = Header(min_length=8, max_length=128)
+) -> object:
     from app.application import service
 
     return service.create_run(body, idempotency_key)
 
 
 @app.get("/api/v1/runs", response_model=list[s.Run])
-def runs(project_id: str | None = None, scope_ids: str | None = None) -> object:
+def runs(
+    project_id: str | None = None,
+    scope_ids: str | None = Query(None, max_length=4000),
+    kind: str | None = Query(None, pattern="^(project|portfolio)$"),
+) -> object:
     from app.application import service
 
-    return service.runs(project_id, scope_ids=scope_ids)
+    return service.run_page(project_id, scope_ids=scope_ids, kind=kind, limit=100).items
 
 
 @app.get("/api/v1/runs/page", response_model=s.RunPage)

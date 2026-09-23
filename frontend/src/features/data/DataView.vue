@@ -6,6 +6,7 @@ import { api } from '../../api/client'
 import type { Dataset, ImportPreview, Revision } from '../../api/types'
 import { refreshProjects, state, formatMoney } from '../../state'
 import DatasetEditor from './DatasetEditor.vue'
+import RevisionHistory from './RevisionHistory.vue'
 import { cloneData, draftBases, isDirty, metricLabels } from './editor'
 
 const error = ref('')
@@ -385,6 +386,11 @@ onBeforeRouteLeave(async () => {
         </el-button>
       </div>
     </section>
+    <RevisionHistory
+      v-if="base"
+      :project-id="base.project_id"
+      :revision-id="base.id"
+    />
   </template>
 </template>
 <style scoped>

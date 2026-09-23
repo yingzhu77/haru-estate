@@ -132,7 +132,7 @@ export function useWorkbench() {
     loading.value = true
     const responses = await Promise.allSettled([
       Promise.all(ids.map((id) => api.input(id))),
-      api.runs(mode === 'project' ? ids[0] : undefined),
+      api.runs(mode === 'project' ? ids[0] : undefined, ids, mode),
     ])
     if (disposed || generation !== loadGeneration) return
     const [inputs, runs] = responses

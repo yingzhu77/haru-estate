@@ -20,6 +20,18 @@ Backend: Python 3.11, create `backend/.venv`, install `backend/requirements-dev.
 
 Checks: in `backend`, `python -m pytest`, `python -m ruff check app tests`, `python -m mypy app`. In `frontend`, `npm run typecheck`, `npm run lint`, `npm test`, `npm run build`. Browser tests use `npm run test:e2e` against the Docker address; first install Chromium using `npx playwright install chromium`.
 
+For isolated browser testing, point a separate API process at a new `HARU_DATA_DIR`, set `HARU_API_PROXY` to its URL when starting Vite, and set `HARU_E2E_URL` to that Vite URL before running browser tests. These tests create synthetic projects and revisions; use a test database rather than your working dataset.
+
+## Input retries and history
+
+Project creation, project edits, revision saves, CSV confirmation and forecast creation require an `Idempotency-Key` header (8–128 characters). Reuse the same key and payload after an uncertain response; a changed payload with that key returns 409. Successful input writes and their response receipts commit in one SQLite transaction. The browser keeps retry keys for uncertain input writes within the current page session. After refreshing or closing that session, inspect saved records before manually repeating an uncertain creation. Saved versions and forecast tasks persist independently of the browser.
+
+The startup migration adds retry receipts and a run-date index without replacing existing inputs or results. `/api/v1/runs/page` and `/api/v1/projects/{id}/revisions` accept `offset` and `limit` (1–100). Run filtering happens before pagination; portfolio child runs are reached through their bound parent. The existing `/runs` list remains available for the latest 100 matching top-level runs. Revision comparison is read-only, project-scoped, and matches business records by ID; payment schedules without IDs are shown as whole arrays.
+
+The History comparison reconciles common forecast months into signed revenue, cost, expense, tax and interest contributions. It is a component bridge, not causal attribution. Currency, unit, profit basis and rule version must agree. Sources open the saved run rather than the latest project data.
+
+Single-project sensitivity reports both 12-month profit and peak uncovered funding gap from the first forecast month through lifecycle end. A positive gap change means greater funding pressure. An out-of-range variant is marked unavailable without invalidating the base result. Portfolio sensitivity is viewed through bound child runs; individual peak gaps must not be summed. Old runs are not recalculated to populate new columns, which display as unavailable.
+
 ## Model boundary
 
 Amounts are CNY yuan, calculated with Decimal and rounded to cents. Screens display ten-thousand yuan. Sales, receipts, delivery-based revenue, development expenditure, cost recognition and payments have separate schedules. The three named scenarios are conditional assumptions, not probability intervals. Simplified taxes are revenue times an explicit example rate; interest is expensed. Results are **simulated management profit**, not statutory net profit or investment advice.
