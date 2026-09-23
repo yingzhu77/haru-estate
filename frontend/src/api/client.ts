@@ -7,6 +7,9 @@ import type {
   Evidence,
   ImportPreview,
   Comparison,
+  RunPage,
+  RevisionPage,
+  RevisionComparison,
 } from './types'
 type S = components['schemas']
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -49,6 +52,30 @@ export const api = {
     }),
   runs: (projectId?: string) =>
     request<Run[]>(`/runs${projectId ? `?project_id=${encodeURIComponent(projectId)}` : ''}`),
+  scopeRuns: (ids: string[]) =>
+    request<Run[]>(`/runs?scope_ids=${encodeURIComponent([...ids].sort().join(','))}`),
+  runPage: (
+    options: {
+      projectId?: string
+      kind?: 'project' | 'portfolio'
+      offset?: number
+      limit?: number
+    } = {},
+  ) => {
+    const params = new URLSearchParams({
+      offset: String(options.offset ?? 0),
+      limit: String(options.limit ?? 20),
+    })
+    if (options.projectId) params.set('project_id', options.projectId)
+    if (options.kind) params.set('kind', options.kind)
+    return request<RunPage>(`/runs/page?${params}`)
+  },
+  revisions: (id: string, offset = 0, limit = 20) =>
+    request<RevisionPage>(`/projects/${id}/revisions?offset=${offset}&limit=${limit}`),
+  compareRevisions: (id: string, left: string, right: string) =>
+    request<RevisionComparison>(
+      `/projects/${id}/revisions/compare?left_id=${encodeURIComponent(left)}&right_id=${encodeURIComponent(right)}`,
+    ),
   run: (id: string) => request<Run>(`/runs/${id}`),
   resume: (id: string) => request<Run>(`/runs/${id}/resume`, { method: 'POST' }),
   evidence: (id: string, metric = 'profit', month?: string) =>

@@ -262,8 +262,11 @@ class Summary(Model):
 
 class Sensitivity(Model):
     label: str
-    profit: str
-    delta: str
+    profit: str | None = None
+    delta: str | None = None
+    max_funding_gap: str | None = None
+    funding_gap_delta: str | None = None
+    error: str | None = None
 
 
 class ForecastResult(Model):
@@ -334,12 +337,61 @@ class ImportConfirm(Model):
     records: list[Actual]
 
 
+class ProfitBridge(Model):
+    month: str
+    revenue: str
+    cogs: str
+    expenses: str
+    taxes: str
+    interest: str
+    profit: str
+
+
 class Comparison(Model):
     left_id: str
     right_id: str
     months: list[str]
     profit_deltas: list[str]
     membership_changed: bool
+    bridge: list[ProfitBridge] = Field(default_factory=list)
+    total_bridge: ProfitBridge | None = None
+
+
+class RunPage(Model):
+    items: list[Run]
+    total: int
+    offset: int
+    limit: int
+
+
+class RevisionInfo(Model):
+    id: str
+    project_id: str
+    version: int
+    known_on: str
+    created_at: str
+    note: str
+
+
+class RevisionPage(Model):
+    items: list[RevisionInfo]
+    total: int
+    offset: int
+    limit: int
+
+
+class FieldChange(Model):
+    path: str
+    before: str | None
+    after: str | None
+    kind: Literal["added", "removed", "changed"]
+
+
+class RevisionComparison(Model):
+    project_id: str
+    left_id: str
+    right_id: str
+    changes: list[FieldChange]
 
 
 class Evidence(Model):

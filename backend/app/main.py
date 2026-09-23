@@ -93,6 +93,22 @@ def revise(project_id: str, body: s.RevisionWrite) -> object:
     return service.revise(project_id, body)
 
 
+@app.get("/api/v1/projects/{project_id}/revisions", response_model=s.RevisionPage)
+def revisions(
+    project_id: str, offset: int = Query(0, ge=0), limit: int = Query(20, ge=1, le=100)
+) -> object:
+    from app.application import service
+
+    return service.revisions(project_id, offset=offset, limit=limit)
+
+
+@app.get("/api/v1/projects/{project_id}/revisions/compare", response_model=s.RevisionComparison)
+def revision_compare(project_id: str, left_id: str, right_id: str) -> object:
+    from app.application import service
+
+    return service.compare_revisions(project_id, left_id, right_id)
+
+
 @app.post("/api/v1/projects/{project_id}/imports/preview", response_model=s.ImportPreview)
 async def preview_import(project_id: str, file: UploadFile) -> object:
     from app.application import service
@@ -116,10 +132,22 @@ def create_run(body: s.RunCreate, idempotency_key: str = Header(min_length=8)) -
 
 
 @app.get("/api/v1/runs", response_model=list[s.Run])
-def runs(project_id: str | None = None) -> object:
+def runs(project_id: str | None = None, scope_ids: str | None = None) -> object:
     from app.application import service
 
-    return service.runs(project_id)
+    return service.runs(project_id, scope_ids=scope_ids)
+
+
+@app.get("/api/v1/runs/page", response_model=s.RunPage)
+def run_page(
+    project_id: str | None = None,
+    kind: str | None = Query(None, pattern="^(project|portfolio)$"),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+) -> object:
+    from app.application import service
+
+    return service.run_page(project_id, kind=kind, offset=offset, limit=limit)
 
 
 @app.get("/api/v1/compare", response_model=s.Comparison)

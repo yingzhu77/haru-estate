@@ -22,3 +22,6 @@ export type Evidence = S['Evidence']
 export type ImportPreview = S['ImportPreview']
 export type Comparison = S['Comparison']
 export type Source = S['Source']
+export type RunPage = Omit<S['RunPage'], 'items'> & { items: Run[] }
+export type RevisionPage = S['RevisionPage']
+export type RevisionComparison = S['RevisionComparison']

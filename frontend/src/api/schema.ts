@@ -80,10 +80,28 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Revisions */
+        get: operations["revisions_api_v1_projects__project_id__revisions_get"];
         put?: never;
         /** Revise */
         post: operations["revise_api_v1_projects__project_id__revisions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/revisions/compare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Revision Compare */
+        get: operations["revision_compare_api_v1_projects__project_id__revisions_compare_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -136,6 +154,23 @@ export interface paths {
         put?: never;
         /** Create Run */
         post: operations["create_run_api_v1_runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/runs/page": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Run Page */
+        get: operations["run_page_api_v1_runs_page_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -316,6 +351,9 @@ export interface components {
             profit_deltas: string[];
             /** Membership Changed */
             membership_changed: boolean;
+            /** Bridge */
+            bridge?: components["schemas"]["ProfitBridge"][];
+            total_bridge?: components["schemas"]["ProfitBridge"] | null;
         };
         /** Contract */
         Contract: {
@@ -393,6 +431,20 @@ export interface components {
             sources: components["schemas"]["Source"][];
             /** Members */
             members: components["schemas"]["Member"][];
+        };
+        /** FieldChange */
+        FieldChange: {
+            /** Path */
+            path: string;
+            /** Before */
+            before: string | null;
+            /** After */
+            after: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "added" | "removed" | "changed";
         };
         /** ForecastResult */
         ForecastResult: {
@@ -634,6 +686,23 @@ export interface components {
              */
             known_on: string;
         };
+        /** ProfitBridge */
+        ProfitBridge: {
+            /** Month */
+            month: string;
+            /** Revenue */
+            revenue: string;
+            /** Cogs */
+            cogs: string;
+            /** Expenses */
+            expenses: string;
+            /** Taxes */
+            taxes: string;
+            /** Interest */
+            interest: string;
+            /** Profit */
+            profit: string;
+        };
         /** Project */
         Project: {
             /** Id */
@@ -687,6 +756,43 @@ export interface components {
             /** Note */
             note: string;
             data: components["schemas"]["Dataset"];
+        };
+        /** RevisionComparison */
+        RevisionComparison: {
+            /** Project Id */
+            project_id: string;
+            /** Left Id */
+            left_id: string;
+            /** Right Id */
+            right_id: string;
+            /** Changes */
+            changes: components["schemas"]["FieldChange"][];
+        };
+        /** RevisionInfo */
+        RevisionInfo: {
+            /** Id */
+            id: string;
+            /** Project Id */
+            project_id: string;
+            /** Version */
+            version: number;
+            /** Known On */
+            known_on: string;
+            /** Created At */
+            created_at: string;
+            /** Note */
+            note: string;
+        };
+        /** RevisionPage */
+        RevisionPage: {
+            /** Items */
+            items: components["schemas"]["RevisionInfo"][];
+            /** Total */
+            total: number;
+            /** Offset */
+            offset: number;
+            /** Limit */
+            limit: number;
         };
         /** RevisionWrite */
         RevisionWrite: {
@@ -792,14 +898,31 @@ export interface components {
                 [key: string]: number;
             };
         };
+        /** RunPage */
+        RunPage: {
+            /** Items */
+            items: components["schemas"]["Run"][];
+            /** Total */
+            total: number;
+            /** Offset */
+            offset: number;
+            /** Limit */
+            limit: number;
+        };
         /** Sensitivity */
         Sensitivity: {
             /** Label */
             label: string;
             /** Profit */
-            profit: string;
+            profit?: string | null;
             /** Delta */
-            delta: string;
+            delta?: string | null;
+            /** Max Funding Gap */
+            max_funding_gap?: string | null;
+            /** Funding Gap Delta */
+            funding_gap_delta?: string | null;
+            /** Error */
+            error?: string | null;
         };
         /** Source */
         Source: {
@@ -1020,6 +1143,40 @@ export interface operations {
             };
         };
     };
+    revisions_api_v1_projects__project_id__revisions_get: {
+        parameters: {
+            query?: {
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevisionPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     revise_api_v1_projects__project_id__revisions_post: {
         parameters: {
             query?: never;
@@ -1042,6 +1199,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Revision"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revision_compare_api_v1_projects__project_id__revisions_compare_get: {
+        parameters: {
+            query: {
+                left_id: string;
+                right_id: string;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevisionComparison"];
                 };
             };
             /** @description Validation Error */
@@ -1129,6 +1320,7 @@ export interface operations {
         parameters: {
             query?: {
                 project_id?: string | null;
+                scope_ids?: string | null;
             };
             header?: never;
             path?: never;
@@ -1178,6 +1370,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Run"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_page_api_v1_runs_page_get: {
+        parameters: {
+            query?: {
+                project_id?: string | null;
+                kind?: string | null;
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunPage"];
                 };
             };
             /** @description Validation Error */
