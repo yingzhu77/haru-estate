@@ -10,6 +10,7 @@ import {
 import type { Run } from '../../api/types'
 import { showEvidence, state } from '../../state'
 import { statusLabels } from './useWorkbench'
+import AgentChat from './AgentChat.vue'
 defineProps<{ run: Run | null; busy: boolean; pollError: string }>()
 const emit = defineEmits<{ resume: []; refresh: [] }>()
 const timeLabel = (value: string) => {
@@ -40,7 +41,7 @@ const timeLabel = (value: string) => {
         <el-icon><Connection /></el-icon>
       </div>
       <h2>Agent 协作</h2>
-      <span class="ai-state">AI 尚未接入</span>
+      <span class="ai-state">程序测算 · AI 问数</span>
     </div>
     <div
       class="flow-strip"
@@ -174,10 +175,11 @@ const timeLabel = (value: string) => {
         </li>
       </ul>
     </div>
+    <AgentChat :run="run" />
     <div class="activity-card explainer">
       <b>每一个数字，都有来处</b>
       <p>销售、回款与收入确认分开计算；开发投入、成本结转和实际付款分别追踪。</p>
-      <p>当前由程序提供测算和运行记录。模型接入后，将辅助查询、解释和追问。</p>
+      <p>程序提供测算和运行记录；AI 问数需要配置 DeepSeek，回答绑定已保存的预测。</p>
     </div>
     <div class="activity-footer">
       <span class="live-indicator" />程序计算 · 来源可查<RouterLink to="/runs">

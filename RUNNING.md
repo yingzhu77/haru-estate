@@ -1,6 +1,6 @@
 # Run HaruEstate
 
-All examples are synthetic. This first release provides deterministic calculations and persisted program steps. DeepSeek and LangGraph integration is a later stage; no model key is required.
+All examples are synthetic. Deterministic calculations, input versions and forecast runs work without a model key. The optional read-only DeepSeek assistant uses LangGraph with SQLite checkpoints to query completed runs and ask for clarification. It cannot modify inputs or create forecasts.
 
 ## Docker
 
@@ -33,6 +33,20 @@ The History comparison reconciles common forecast months into signed revenue, co
 Single-project sensitivity reports both 12-month profit and peak uncovered funding gap from the first forecast month through lifecycle end. A positive gap change means greater funding pressure. An out-of-range variant is marked unavailable without invalidating the base result. Portfolio sensitivity is viewed through bound child runs; individual peak gaps must not be summed. Old runs are not recalculated to populate new columns, which display as unavailable.
 
 ## Model boundary
+
+### Optional read-only assistant
+
+Set `DEEPSEEK_API_KEY` and `DEEPSEEK_MODEL` on the API process. Use a model identifier available in your DeepSeek account and official API documentation. In Compose, copy `.env.example` to the ignored `.env`, then fill those two values; preserve any existing local settings. For local Python development, set process environment variables before starting Uvicorn (`.env` is not loaded automatically). Restart the API after changing model configuration. Never put keys in `VITE_*` variables or frontend requests.
+
+The adapter sends requests only to the official `https://api.deepseek.com/chat/completions` endpoint with JSON output. It sends the question, clarification replies, scenario and available months; it does not send financial amounts or complete input tables. Questions should not include credentials. The model selects one permitted metric and period; the program validates that selection and reads Decimal values from the bound immutable run. The displayed explanation is a maintained glossary, not an invented causal claim. Routing can still be mistaken: review the displayed metric and period. Real-model compatibility must be smoke-tested with the configured model separately from deterministic tests.
+
+`GET /api/v1/agent/status` reports configuration without calling the model. `POST /api/v1/agent/tasks` accepts `{run_id, question}` and requires an idempotency key. Tasks are listed by `GET /api/v1/agent/tasks?run_id=...`; poll an individual task until `completed`, `failed`, `interrupted` or `awaiting_reply`. Reply with `{token, reply}` to `/agent/tasks/{id}/reply` using an idempotency key. The token belongs to one saved clarification. `/agent/tasks/{id}/resume` resumes interrupted or failed work against the same run and checkpoints, without automatically accepting a changed model configuration. All endpoints are under `/api/v1`.
+
+Each task has at most three model calls, including failures, and at most three execution attempts. The adapter makes no automatic retries, caps responses at 64 KiB, uses a 20-second read timeout and checks a 25-second wall-clock budget between response chunks. Slow network reads may extend the observed time up to one additional read timeout. A paid call that was in flight during an abrupt crash may be repeated within the remaining call budget; a validated response saved before the crash is reused. No model number is accepted as a financial result. Optional external tracing is disabled for this graph.
+
+The existing single executor services forecasts and assistant tasks; a slow model request can briefly delay a queued forecast. Closing the page does not cancel work. An interrupted running task is shown for explicit recovery after restart; an unanswered clarification remains available with the same token. Business task records live in `haru.sqlite3`; graph state lives in `agent-checkpoints.sqlite3` in the same data directory/volume. To preserve in-progress assistant work in a backup, stop the API and back up **both databases as a consistent pair**, using the SQLite backup utility for each before restarting. A business-database-only backup retains forecast results but is not a complete assistant recovery backup.
+
+Deterministic model adapters exist only in automated tests. Missing model configuration displays an unavailable assistant; it does not generate simulated AI responses. Natural-language plan changes, approval, document extraction and causal explanations remain outside this first read-only assistant.
 
 Amounts are CNY yuan, calculated with Decimal and rounded to cents. Screens display ten-thousand yuan. Sales, receipts, delivery-based revenue, development expenditure, cost recognition and payments have separate schedules. The three named scenarios are conditional assumptions, not probability intervals. Simplified taxes are revenue times an explicit example rate; interest is expensed. Results are **simulated management profit**, not statutory net profit or investment advice.
 

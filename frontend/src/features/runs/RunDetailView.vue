@@ -5,6 +5,7 @@ import { api } from '../../api/client'
 import type { Revision, Run } from '../../api/types'
 import { formatMoney, showEvidence } from '../../state'
 import { runLabels, scenarioLabels } from '../data/editor'
+import AgentChat from '../workbench/AgentChat.vue'
 const route = useRoute()
 const run = ref<Run | null>(null)
 const snapshots = ref<Revision[]>([])
@@ -350,6 +351,7 @@ onBeforeUnmount(() => {
         :image-size="50"
       />
     </section>
+    <AgentChat :run="run" />
   </template>
 </template>
 <style scoped>

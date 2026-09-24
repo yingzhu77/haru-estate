@@ -48,6 +48,15 @@ class MutationRow(Base):
     response: Mapped[dict[str, Any]] = mapped_column(JSON)
 
 
+class AgentTaskRow(Base):
+    __tablename__ = "agent_tasks"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    run_id: Mapped[str] = mapped_column(ForeignKey("runs.id"), index=True)
+    status: Mapped[str] = mapped_column(String, index=True)
+    created_at: Mapped[str]
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON)
+
+
 def make_engine(path: Path) -> Engine:
     engine = create_engine(
         f"sqlite:///{path.as_posix()}", connect_args={"check_same_thread": False, "timeout": 15}

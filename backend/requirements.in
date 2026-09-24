@@ -5,3 +5,8 @@ alembic
 pydantic
 pandas
 python-multipart
+httpx
+langgraph
+langgraph-checkpoint-sqlite
+langchain-core
+langsmith

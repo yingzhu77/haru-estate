@@ -4,6 +4,7 @@ import { DataAnalysis, Setting, RefreshLeft, Calendar } from '@element-plus/icon
 import type { Revision, RunCreate } from '../../api/types'
 import { state } from '../../state'
 import { defaultOverrides, scenarioLabels } from './useWorkbench'
+import ScenarioPreview from './ScenarioPreview.vue'
 
 const props = defineProps<{
   revision?: Revision
@@ -76,6 +77,10 @@ const phases = computed(() => props.revision?.data.phases ?? [])
         {{ label }}
       </button>
     </div>
+    <ScenarioPreview
+      :scenario="scenario"
+      :revision-id="revision?.id"
+    />
     <template v-if="state.mode === 'project'">
       <div class="input-caption">
         <span>当前输入 <b v-if="revision">v{{ revision.version }}</b></span>

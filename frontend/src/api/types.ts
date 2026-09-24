@@ -1,5 +1,8 @@
 import type { components } from './schema'
 type S = components['schemas']
+export type EffectiveParameters = S['EffectiveParameters']
+export type AgentStatus = S['AgentStatus']
+export type AgentTask = S['AgentTask']
 export type Project = S['Project']
 export type Dataset = S['Dataset'] & { assumptions: S['Assumptions'] }
 export type Phase = S['Phase']

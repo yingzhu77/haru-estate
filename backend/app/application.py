@@ -19,6 +19,8 @@ from sqlalchemy.orm import Session
 
 from alembic import command
 from app import schemas as s
+from app.agent_model import QueryModel
+from app.agent_service import AgentService
 from app.domain import D, aggregate, calculate
 from app.mutations import remember, replay
 from app.revision_diff import dataset_changes
@@ -40,7 +42,13 @@ def require(value: T | None, message: str, code: int = 404) -> T:
 
 
 class Service:
-    def __init__(self, directory: Path | None = None, *, seed: bool = True) -> None:
+    def __init__(
+        self,
+        directory: Path | None = None,
+        *,
+        seed: bool = True,
+        agent_model: QueryModel | None = None,
+    ) -> None:
         self.directory = directory or Path(os.environ.get("HARU_DATA_DIR", "data"))
         self.directory.mkdir(parents=True, exist_ok=True)
         self.engine = make_engine(self.directory / "haru.sqlite3")
@@ -48,6 +56,8 @@ class Service:
         self.halt = threading.Event()
         self.thread: threading.Thread | None = None
         self.seed = seed
+        self.agent_model = agent_model
+        self.agent: AgentService
 
     def start(self, *, worker: bool = True) -> None:
         config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
@@ -61,6 +71,7 @@ class Service:
         if self.seed and not self.projects():
             self.create_project(s.ProjectCreate(name="云汀花园", template="demo"), variant=0)
             self.create_project(s.ProjectCreate(name="松岚雅苑", template="demo"), variant=1)
+        self.agent = AgentService(self, self.agent_model)
         self.halt.clear()
         if worker:
             self.thread = threading.Thread(target=self._worker, name="haru-jobs", daemon=True)
@@ -69,7 +80,9 @@ class Service:
     def stop(self) -> None:
         self.halt.set()
         if self.thread:
-            self.thread.join(timeout=10)
+            self.thread.join(timeout=50)
+        if hasattr(self, "agent") and (self.thread is None or not self.thread.is_alive()):
+            self.agent.close()
 
     def health(self) -> None:
         with self.engine.connect() as connection:
@@ -171,6 +184,41 @@ class Service:
             if row.project_id != project_id:
                 raise HTTPException(404, "版本不属于该项目")
             return s.Revision.model_validate(row.payload)
+
+    def parameter_preview(self, body: s.RunCreate) -> list[s.EffectiveParameters]:
+        from app.domain_parameters import effective_parameters
+
+        results = []
+        with Session(self.engine) as db:
+            for project_id in body.project_ids:
+                project = require(db.get(ProjectRow, project_id), "项目不存在")
+                row = db.scalar(
+                    select(RevisionRow)
+                    .where(
+                        RevisionRow.project_id == project_id,
+                        RevisionRow.known_on <= body.information_cutoff.isoformat(),
+                    )
+                    .order_by(RevisionRow.version.desc())
+                    .limit(1)
+                )
+                if row is None:
+                    raise HTTPException(422, "信息截止之前没有可用输入版本")
+                revision = s.Revision.model_validate(row.payload)
+                if revision.data.actual_closed_through > body.forecast_origin.strftime("%Y-%m"):
+                    raise HTTPException(422, "已结账月份不能晚于预测基准月")
+                try:
+                    results.append(
+                        effective_parameters(
+                            revision,
+                            project.payload["name"],
+                            body.information_cutoff,
+                            body.scenario,
+                            body.overrides.get(project_id, s.Overrides()),
+                        )
+                    )
+                except ValueError as exc:
+                    raise HTTPException(422, str(exc)) from exc
+        return results
 
     def revise(
         self, project_id: str, body: s.RevisionWrite, *, key: str | None = None
@@ -608,7 +656,7 @@ class Service:
 
     def _worker(self) -> None:
         while not self.halt.is_set():
-            if not self.process_next():
+            if not self.process_next() and not self.agent.process_next():
                 self.halt.wait(0.2)
 
     def evidence(self, run_id: str, metric: str, month: str | None) -> s.Evidence:

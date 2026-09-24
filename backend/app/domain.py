@@ -5,6 +5,7 @@ from collections.abc import Iterable
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 
+from app.domain_parameters import factors
 from app.schemas import (
     Dataset,
     ForecastResult,
@@ -137,14 +138,7 @@ def _calculate(
     a = data.assumptions
     if any(D(v) < 0 for v in (a.monthly_overhead, a.loan_limit)):
         raise ValueError("费用与融资额度不能为负")
-    price_factor = 1 + D(override.price_change)
-    cost_factor = 1 + D(override.remaining_cost_change)
-    if scenario == "optimistic":
-        price_factor *= D("1.05")
-        cost_factor *= D("0.97")
-    elif scenario == "prudent":
-        price_factor *= D("0.95")
-        cost_factor *= D("1.05")
+    price_factor, cost_factor = factors(scenario, override)
     ledger: dict[str, dict[str, Decimal]] = defaultdict(lambda: defaultdict(Decimal))
     sources: list[Source] = []
     warnings = ["模拟税费为收入比例计提；利息费用化；不含集团抵销、持股折算与复杂税务清算。"]

@@ -407,3 +407,111 @@ class ApiError(Model):
     code: str
     message: str
     request_id: str
+
+
+class EffectivePhase(Model):
+    id: str
+    name: str
+    original_price: str
+    effective_price: str
+    original_delivery: str
+    effective_delivery: str
+
+
+class EffectiveParameters(Model):
+    project_id: str
+    project_name: str
+    revision_id: str
+    version: int
+    scenario: Scenario
+    scenario_price_percent: str
+    scenario_cost_percent: str
+    price_percent: str
+    cost_percent: str
+    future_cost_before: str | None
+    future_cost_after: str | None
+    collection_lag: int
+    extra_collection_delay: int
+    phases: list[EffectivePhase]
+    warnings: list[str]
+
+
+AgentMetric = Literal[
+    "profit",
+    "revenue",
+    "cogs",
+    "expenses",
+    "taxes",
+    "interest",
+    "collections",
+    "payments",
+    "net_cash_flow",
+    "cash_balance",
+    "uncovered_gap",
+]
+
+
+class AgentPlan(Model):
+    action: Literal["query", "clarify"]
+    metric: AgentMetric | None = None
+    period: Literal["next_month", "twelve_month", "lifecycle", "month"] | None = None
+    month: Month | None = None
+    clarification: str | None = Field(default=None, min_length=1, max_length=500)
+
+    @model_validator(mode="after")
+    def valid_action(self) -> "AgentPlan":
+        if self.action == "query":
+            if self.metric is None or self.period is None:
+                raise ValueError("查询必须明确指标和期间")
+            if (self.period == "month") != (self.month is not None):
+                raise ValueError("仅单月查询需要指定月份")
+        elif not self.clarification:
+            raise ValueError("澄清需要一个明确的问题")
+        return self
+
+
+class AgentStatus(Model):
+    configured: bool
+    provider: str
+    model: str
+    max_calls: int = 3
+
+
+class AgentCreate(Model):
+    run_id: str = Field(min_length=1, max_length=100)
+    question: str = Field(min_length=1, max_length=2000)
+
+
+class AgentReply(Model):
+    token: str = Field(min_length=1, max_length=100)
+    reply: str = Field(min_length=1, max_length=1000)
+
+
+class AgentAnswer(Model):
+    metric: AgentMetric
+    label: str
+    amount: str
+    unit: str = "元"
+    currency: str = "CNY"
+    period_label: str
+    months: list[str]
+    explanation: str
+    source_count: int
+    evidence_month: str | None = None
+
+
+class AgentTask(Model):
+    id: str
+    run_id: str
+    question: str
+    status: Literal["queued", "running", "awaiting_reply", "completed", "failed", "interrupted"]
+    created_at: str
+    model: str
+    provider: str
+    calls: int = 0
+    attempt: int = 1
+    clarification: str | None = None
+    reply_token: str | None = None
+    answer: AgentAnswer | None = None
+    error: str | None = None
+    steps: list[Step] = Field(default_factory=list)

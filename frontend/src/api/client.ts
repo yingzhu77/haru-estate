@@ -67,6 +67,19 @@ async function mutate<T>(path: string, method: string, body: unknown): Promise<T
   }
 }
 export const api = {
+  agentStatus: () => request<S['AgentStatus']>('/agent/status'),
+  agentTasks: (runId: string) =>
+    request<S['AgentTask'][]>(`/agent/tasks?run_id=${encodeURIComponent(runId)}`),
+  createAgentTask: (body: S['AgentCreate']) => mutate<S['AgentTask']>('/agent/tasks', 'POST', body),
+  replyAgent: (id: string, body: S['AgentReply']) =>
+    mutate<S['AgentTask']>(`/agent/tasks/${id}/reply`, 'POST', body),
+  resumeAgent: (id: string) =>
+    request<S['AgentTask']>(`/agent/tasks/${id}/resume`, { method: 'POST' }),
+  parameterPreview: (body: RunCreate) =>
+    request<S['EffectiveParameters'][]>('/parameters/preview', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   projects: () => request<Project[]>('/projects'),
   createProject: (body: S['ProjectCreate']) => mutate<Project>('/projects', 'POST', body),
   patchProject: (id: string, body: S['ProjectPatch']) =>

@@ -86,7 +86,59 @@ def health() -> dict[str, str]:
     from app.application import service
 
     service.health()
-    return {"status": "ok", "ai": "not_connected"}
+    return {
+        "status": "ok",
+        "ai": "configured" if service.agent.status().configured else "not_connected",
+    }
+
+
+@app.get("/api/v1/agent/status", response_model=s.AgentStatus)
+def agent_status() -> object:
+    from app.application import service
+
+    return service.agent.status()
+
+
+@app.post("/api/v1/agent/tasks", response_model=s.AgentTask, status_code=202)
+def agent_create(
+    body: s.AgentCreate,
+    idempotency_key: str = Header(min_length=8, max_length=128),
+) -> object:
+    from app.application import service
+
+    return service.agent.create(body, idempotency_key)
+
+
+@app.get("/api/v1/agent/tasks", response_model=list[s.AgentTask])
+def agent_tasks(run_id: str) -> object:
+    from app.application import service
+
+    return service.agent.list(run_id)
+
+
+@app.get("/api/v1/agent/tasks/{task_id}", response_model=s.AgentTask)
+def agent_task(task_id: str) -> object:
+    from app.application import service
+
+    return service.agent.get(task_id)
+
+
+@app.post("/api/v1/agent/tasks/{task_id}/reply", response_model=s.AgentTask, status_code=202)
+def agent_reply(
+    task_id: str,
+    body: s.AgentReply,
+    idempotency_key: str = Header(min_length=8, max_length=128),
+) -> object:
+    from app.application import service
+
+    return service.agent.reply(task_id, body, idempotency_key)
+
+
+@app.post("/api/v1/agent/tasks/{task_id}/resume", response_model=s.AgentTask, status_code=202)
+def agent_resume(task_id: str) -> object:
+    from app.application import service
+
+    return service.agent.resume(task_id)
 
 
 @app.get("/api/v1/projects", response_model=list[s.Project])
@@ -187,6 +239,13 @@ def runs(
     from app.application import service
 
     return service.run_page(project_id, scope_ids=scope_ids, kind=kind, limit=100).items
+
+
+@app.post("/api/v1/parameters/preview", response_model=list[s.EffectiveParameters])
+def parameter_preview(body: s.RunCreate) -> object:
+    from app.application import service
+
+    return service.parameter_preview(body)
 
 
 @app.get("/api/v1/runs/page", response_model=s.RunPage)
