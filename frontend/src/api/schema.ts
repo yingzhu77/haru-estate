@@ -125,6 +125,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/agent/tasks/{task_id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Agent Confirm */
+        post: operations["agent_confirm_api_v1_agent_tasks__task_id__confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{project_id}": {
         parameters: {
             query?: never;
@@ -418,6 +435,24 @@ export interface components {
             run_id: string;
             /** Question */
             question: string;
+            /**
+             * Mode
+             * @default query
+             * @enum {string}
+             */
+            mode: "query" | "change";
+            /** Known On */
+            known_on?: string | null;
+        };
+        /** AgentMessage */
+        AgentMessage: {
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "assistant" | "user";
+            /** Content */
+            content: string;
         };
         /** AgentReply */
         AgentReply: {
@@ -452,7 +487,7 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "queued" | "running" | "awaiting_reply" | "completed" | "failed" | "interrupted";
+            status: "queued" | "running" | "awaiting_reply" | "awaiting_confirmation" | "completed" | "failed" | "interrupted";
             /** Created At */
             created_at: string;
             /** Model */
@@ -478,6 +513,17 @@ export interface components {
             error?: string | null;
             /** Steps */
             steps?: components["schemas"]["Step"][];
+            /** Dialogue */
+            dialogue?: components["schemas"]["AgentMessage"][];
+            /**
+             * Mode
+             * @default query
+             * @enum {string}
+             */
+            mode: "query" | "change";
+            /** Known On */
+            known_on?: string | null;
+            draft?: components["schemas"]["ChangeDraft"] | null;
         };
         /** ApiError */
         ApiError: {
@@ -549,6 +595,53 @@ export interface components {
         Body_preview_import_api_v1_projects__project_id__imports_preview_post: {
             /** File */
             file: string;
+        };
+        /** ChangeConfirm */
+        ChangeConfirm: {
+            /** Draft Id */
+            draft_id: string;
+            /** Token */
+            token: string;
+            /** Project Id */
+            project_id: string;
+            /** Phase Id */
+            phase_id: string;
+            /** Base Revision Id */
+            base_revision_id: string;
+            /** Base Version */
+            base_version: number;
+        };
+        /** ChangeDraft */
+        ChangeDraft: {
+            /** Id */
+            id: string;
+            /** Token */
+            token: string;
+            /** Project Id */
+            project_id: string;
+            /** Project Name */
+            project_name: string;
+            /** Phase Id */
+            phase_id: string;
+            /** Phase Name */
+            phase_name: string;
+            /** Base Revision Id */
+            base_revision_id: string;
+            /** Base Version */
+            base_version: number;
+            /**
+             * Known On
+             * Format: date
+             */
+            known_on: string;
+            change: components["schemas"]["PhaseChange"];
+            /** Before */
+            before: string;
+            /** After */
+            after: string;
+            preview: components["schemas"]["EffectiveParameters"];
+            /** Revision Id */
+            revision_id?: string | null;
         };
         /** Comparison */
         Comparison: {
@@ -942,6 +1035,18 @@ export interface components {
              * @default 2026-01-01
              */
             known_on: string;
+        };
+        /** PhaseChange */
+        PhaseChange: {
+            /** Phase Id */
+            phase_id: string;
+            /**
+             * Field
+             * @enum {string}
+             */
+            field: "price_change" | "delivery_delay";
+            /** Value */
+            value: string;
         };
         /** ProfitBridge */
         ProfitBridge: {
@@ -1398,6 +1503,7 @@ export interface operations {
         parameters: {
             query: {
                 run_id: string;
+                offset?: number;
             };
             header?: never;
             path?: never;
@@ -1880,6 +1986,88 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Project"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Request Entity Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    agent_confirm_api_v1_agent_tasks__task_id__confirm_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "idempotency-key": string;
+            };
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeConfirm"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTask"];
                 };
             };
             /** @description Bad Request */
@@ -3049,6 +3237,7 @@ export interface operations {
             query?: {
                 metric?: string;
                 month?: string | null;
+                months?: string[] | null;
             };
             header?: never;
             path: {

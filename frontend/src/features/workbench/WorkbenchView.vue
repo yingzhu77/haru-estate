@@ -37,6 +37,7 @@ const {
   generate,
   resume,
   loadScope,
+  refreshInputs,
   markDirty,
   refreshStatus,
 } = useWorkbench()
@@ -606,6 +607,7 @@ onBeforeRouteLeave(async () => {
         :poll-error="pollError"
         @resume="resume"
         @refresh="refreshStatus"
+        @confirmed="refreshInputs"
       />
     </div>
 

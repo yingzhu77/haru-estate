@@ -145,6 +145,20 @@ afterEach(() => {
 })
 
 describe('workbench persistent-run coordination', () => {
+  it('refreshes confirmed inputs while retaining the bound result and temporary adjustments', async () => {
+    const saved = run([projectA], 'completed')
+    vi.mocked(api.runs).mockResolvedValue([saved])
+    const workbench = mountWorkbench()
+    await flushPromises()
+    state.overrides[projectA] = { ...defaultOverrides(), price_change: '0.02' }
+    vi.mocked(api.input).mockResolvedValue({ ...revision(projectA), id: 'new-revision', version: 2 })
+    await workbench.refreshInputs()
+    expect(workbench.currentRevision.value?.version).toBe(2)
+    expect(workbench.resultRun.value?.id).toBe(saved.id)
+    expect(state.overrides[projectA]?.price_change).toBe('0.02')
+    expect(workbench.dirtySinceResult.value).toBe(true)
+    expect(api.createRun).not.toHaveBeenCalled()
+  })
   it('keeps a waiting portfolio busy and polls through to completion without duplicate submission', async () => {
     state.mode = 'portfolio'
     const waiting = run([projectA, projectB], 'waiting', 'portfolio')

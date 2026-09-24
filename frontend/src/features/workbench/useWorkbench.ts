@@ -164,6 +164,19 @@ export function useWorkbench() {
   function markDirty() {
     dirtySinceResult.value = true
   }
+  async function refreshInputs() {
+    const key = selectedKey.value
+    const generation = loadGeneration
+    try {
+      const inputs = await Promise.all(selectedIds.value.map((id) => api.input(id)))
+      if (disposed || selectedKey.value !== key || loadGeneration !== generation) return
+      revisions.value = Object.fromEntries(inputs.map((input) => [input.project_id, input]))
+      markDirty()
+    } catch (cause) {
+      if (!disposed && selectedKey.value === key && loadGeneration === generation)
+        error.value = cause instanceof Error ? cause.message : '新版本读取失败，请刷新项目输入。'
+    }
+  }
   watch(() => [state.forecastOrigin, state.informationCutoff, editor.scenario], markDirty)
   watch(
     selectedKey,
@@ -271,6 +284,7 @@ export function useWorkbench() {
     generate,
     resume,
     loadScope,
+    refreshInputs,
     markDirty,
     refreshStatus: () => (currentRun.value ? poll(currentRun.value.id) : Promise.resolve()),
   }

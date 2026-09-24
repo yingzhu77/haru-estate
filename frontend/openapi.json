@@ -277,6 +277,17 @@
               "type": "string",
               "title": "Run Id"
             }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
           }
         ],
         "responses": {
@@ -759,6 +770,116 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Project"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        }
+      }
+    },
+    "/api/v1/agent/tasks/{task_id}/confirm": {
+      "post": {
+        "summary": "Agent Confirm",
+        "operationId": "agent_confirm_api_v1_agent_tasks__task_id__confirm_post",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 128,
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeConfirm"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentTask"
                 }
               }
             }
@@ -2345,13 +2466,35 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "type": "string",
+                  "pattern": "^20\\d{2}-(0[1-9]|1[0-2])$"
                 },
                 {
                   "type": "null"
                 }
               ],
               "title": "Month"
+            }
+          },
+          {
+            "name": "months",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^20\\d{2}-(0[1-9]|1[0-2])$"
+                  },
+                  "maxItems": 240
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Months"
             }
           }
         ],
@@ -2600,6 +2743,27 @@
             "maxLength": 2000,
             "minLength": 1,
             "title": "Question"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "query",
+              "change"
+            ],
+            "title": "Mode",
+            "default": "query"
+          },
+          "known_on": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Known On"
           }
         },
         "additionalProperties": false,
@@ -2609,6 +2773,29 @@
           "question"
         ],
         "title": "AgentCreate"
+      },
+      "AgentMessage": {
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "assistant",
+              "user"
+            ],
+            "title": "Role"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "role",
+          "content"
+        ],
+        "title": "AgentMessage"
       },
       "AgentReply": {
         "properties": {
@@ -2682,6 +2869,7 @@
               "queued",
               "running",
               "awaiting_reply",
+              "awaiting_confirmation",
               "completed",
               "failed",
               "interrupted"
@@ -2759,6 +2947,44 @@
             },
             "type": "array",
             "title": "Steps"
+          },
+          "dialogue": {
+            "items": {
+              "$ref": "#/components/schemas/AgentMessage"
+            },
+            "type": "array",
+            "title": "Dialogue"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "query",
+              "change"
+            ],
+            "title": "Mode",
+            "default": "query"
+          },
+          "known_on": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Known On"
+          },
+          "draft": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChangeDraft"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "additionalProperties": false,
@@ -2901,6 +3127,129 @@
           "file"
         ],
         "title": "Body_preview_import_api_v1_projects__project_id__imports_preview_post"
+      },
+      "ChangeConfirm": {
+        "properties": {
+          "draft_id": {
+            "type": "string",
+            "title": "Draft Id"
+          },
+          "token": {
+            "type": "string",
+            "title": "Token"
+          },
+          "project_id": {
+            "type": "string",
+            "title": "Project Id"
+          },
+          "phase_id": {
+            "type": "string",
+            "title": "Phase Id"
+          },
+          "base_revision_id": {
+            "type": "string",
+            "title": "Base Revision Id"
+          },
+          "base_version": {
+            "type": "integer",
+            "title": "Base Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "draft_id",
+          "token",
+          "project_id",
+          "phase_id",
+          "base_revision_id",
+          "base_version"
+        ],
+        "title": "ChangeConfirm"
+      },
+      "ChangeDraft": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "token": {
+            "type": "string",
+            "title": "Token"
+          },
+          "project_id": {
+            "type": "string",
+            "title": "Project Id"
+          },
+          "project_name": {
+            "type": "string",
+            "title": "Project Name"
+          },
+          "phase_id": {
+            "type": "string",
+            "title": "Phase Id"
+          },
+          "phase_name": {
+            "type": "string",
+            "title": "Phase Name"
+          },
+          "base_revision_id": {
+            "type": "string",
+            "title": "Base Revision Id"
+          },
+          "base_version": {
+            "type": "integer",
+            "title": "Base Version"
+          },
+          "known_on": {
+            "type": "string",
+            "format": "date",
+            "title": "Known On"
+          },
+          "change": {
+            "$ref": "#/components/schemas/PhaseChange"
+          },
+          "before": {
+            "type": "string",
+            "title": "Before"
+          },
+          "after": {
+            "type": "string",
+            "title": "After"
+          },
+          "preview": {
+            "$ref": "#/components/schemas/EffectiveParameters"
+          },
+          "revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "token",
+          "project_id",
+          "project_name",
+          "phase_id",
+          "phase_name",
+          "base_revision_id",
+          "base_version",
+          "known_on",
+          "change",
+          "before",
+          "after",
+          "preview"
+        ],
+        "title": "ChangeDraft"
       },
       "Comparison": {
         "properties": {
@@ -3812,6 +4161,38 @@
           "delivery_month"
         ],
         "title": "Phase"
+      },
+      "PhaseChange": {
+        "properties": {
+          "phase_id": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Phase Id"
+          },
+          "field": {
+            "type": "string",
+            "enum": [
+              "price_change",
+              "delivery_delay"
+            ],
+            "title": "Field"
+          },
+          "value": {
+            "type": "string",
+            "maxLength": 24,
+            "pattern": "^-?\\d+(\\.\\d{1,8})?$",
+            "title": "Value"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "phase_id",
+          "field",
+          "value"
+        ],
+        "title": "PhaseChange"
       },
       "ProfitBridge": {
         "properties": {

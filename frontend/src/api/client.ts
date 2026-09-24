@@ -68,13 +68,15 @@ async function mutate<T>(path: string, method: string, body: unknown): Promise<T
 }
 export const api = {
   agentStatus: () => request<S['AgentStatus']>('/agent/status'),
-  agentTasks: (runId: string) =>
-    request<S['AgentTask'][]>(`/agent/tasks?run_id=${encodeURIComponent(runId)}`),
+  agentTasks: (runId: string, offset = 0) =>
+    request<S['AgentTask'][]>(`/agent/tasks?run_id=${encodeURIComponent(runId)}&offset=${offset}`),
   createAgentTask: (body: S['AgentCreate']) => mutate<S['AgentTask']>('/agent/tasks', 'POST', body),
   replyAgent: (id: string, body: S['AgentReply']) =>
     mutate<S['AgentTask']>(`/agent/tasks/${id}/reply`, 'POST', body),
   resumeAgent: (id: string) =>
     request<S['AgentTask']>(`/agent/tasks/${id}/resume`, { method: 'POST' }),
+  confirmAgent: (id: string, body: S['ChangeConfirm']) =>
+    mutate<S['AgentTask']>(`/agent/tasks/${id}/confirm`, 'POST', body),
   parameterPreview: (body: RunCreate) =>
     request<S['EffectiveParameters'][]>('/parameters/preview', {
       method: 'POST',
@@ -134,9 +136,9 @@ export const api = {
     ),
   run: (id: string) => request<Run>(`/runs/${id}`),
   resume: (id: string) => request<Run>(`/runs/${id}/resume`, { method: 'POST' }),
-  evidence: (id: string, metric = 'profit', month?: string) =>
+  evidence: (id: string, metric = 'profit', month?: string, months?: string[]) =>
     request<Evidence>(
-      `/runs/${id}/evidence?metric=${encodeURIComponent(metric)}${month ? `&month=${encodeURIComponent(month)}` : ''}`,
+      `/runs/${id}/evidence?metric=${encodeURIComponent(metric)}${month ? `&month=${encodeURIComponent(month)}` : ''}${(months ?? []).map((value) => `&months=${encodeURIComponent(value)}`).join('')}`,
     ),
   compare: (left: string, right: string) =>
     request<Comparison>(

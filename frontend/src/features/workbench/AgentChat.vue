@@ -5,20 +5,34 @@ import type { AgentStatus, AgentTask, Run } from '../../api/types'
 import { showEvidence } from '../../state'
 
 const props = defineProps<{ run: Run | null }>()
+const emit = defineEmits<{ confirmed: [] }>()
 const status = ref<AgentStatus | null>(null)
 const tasks = ref<AgentTask[]>([])
+const selectedId = ref('')
+const offset = ref(0)
 const question = ref('')
+const mode = ref<'query' | 'change'>('query')
+const knownOn = ref(new Date().toLocaleDateString('en-CA'))
 const reply = ref('')
 const error = ref('')
 const busy = ref(false)
 let generation = 0
 let timer: ReturnType<typeof setTimeout> | undefined
-const current = computed(() => tasks.value[0])
+const current = computed(
+  () => tasks.value.find((task) => task.id === selectedId.value) ?? tasks.value[0],
+)
+watch(
+  () => current.value?.id,
+  () => {
+    reply.value = ''
+  },
+)
 const enabled = computed(() => status.value?.configured && props.run?.status === 'completed')
 const labels: Record<AgentTask['status'], string> = {
   queued: '已保存，等待处理',
   running: '正在理解问题',
   awaiting_reply: '需要你补充',
+  awaiting_confirmation: '草稿待你确认',
   completed: '回答已保存',
   failed: '处理失败',
   interrupted: '服务中断，可继续',
@@ -27,7 +41,7 @@ async function load(token: number, runId?: string) {
   try {
     const [configuration, saved] = await Promise.all([
       api.agentStatus(),
-      runId ? api.agentTasks(runId) : Promise.resolve([]),
+      runId ? api.agentTasks(runId, offset.value) : Promise.resolve([]),
     ])
     if (generation !== token) return
     status.value = configuration
@@ -46,6 +60,9 @@ watch(
     ++generation
     clearTimeout(timer)
     tasks.value = []
+    selectedId.value = ''
+    offset.value = 0
+    mode.value = 'query'
     question.value = ''
     reply.value = ''
     error.value = ''
@@ -58,7 +75,7 @@ onBeforeUnmount(() => {
   ++generation
   clearTimeout(timer)
 })
-async function submit(action: 'create' | 'reply' | 'resume') {
+async function submit(action: 'create' | 'reply' | 'resume' | 'confirm') {
   if (!props.run || busy.value) return
   const token = generation
   const runId = props.run.id
@@ -66,19 +83,39 @@ async function submit(action: 'create' | 'reply' | 'resume') {
   error.value = ''
   clearTimeout(timer)
   try {
-    if (action === 'create')
-      await api.createAgentTask({ run_id: runId, question: question.value.trim() })
-    else if (current.value) {
+    if (action === 'create') {
+      const created = await api.createAgentTask({
+        run_id: runId,
+        question: question.value.trim(),
+        mode: mode.value,
+        known_on: mode.value === 'change' ? knownOn.value : null,
+      })
+      if (generation !== token) return
+      offset.value = 0
+      selectedId.value = created.id
+    } else if (current.value) {
       if (action === 'reply' && current.value.reply_token) {
         await api.replyAgent(current.value.id, {
           token: current.value.reply_token,
           reply: reply.value.trim(),
         })
       } else if (action === 'resume') await api.resumeAgent(current.value.id)
+      else if (action === 'confirm' && current.value.draft) {
+        const draft = current.value.draft
+        await api.confirmAgent(current.value.id, {
+          draft_id: draft.id,
+          token: draft.token,
+          project_id: draft.project_id,
+          phase_id: draft.phase_id,
+          base_revision_id: draft.base_revision_id,
+          base_version: draft.base_version,
+        })
+        if (generation === token) emit('confirmed')
+      }
     }
     if (generation !== token) return
-    question.value = ''
-    reply.value = ''
+    if (action === 'create') question.value = ''
+    if (action === 'reply') reply.value = ''
     await load(token, runId)
   } catch (cause) {
     if (generation === token)
@@ -94,7 +131,14 @@ function evidence(task: AgentTask) {
       task.run_id,
       answer.metric,
       answer.evidence_month ?? (answer.months.length === 1 ? answer.months[0] : undefined),
+      answer.evidence_month ? undefined : answer.months,
     )
+}
+function page(delta: number) {
+  offset.value = Math.max(0, offset.value + delta)
+  selectedId.value = ''
+  ++generation
+  refresh()
 }
 function refresh() {
   error.value = ''
@@ -108,9 +152,9 @@ function refresh() {
     class="agent-chat"
     aria-label="AI 问数"
   >
-    <h3>问这次预测</h3>
+    <h3>问这次预测 / 变更草稿</h3>
     <p class="note">
-      只读问数：模型理解问题，程序读取金额。不会修改计划，也不会替你确认任何变更。
+      问数只读；变更先生成草稿，只有你点击确认才保存新版本。模型不计算金额、不批准变更。
     </p>
     <p
       v-if="status && !status.configured"
@@ -131,9 +175,38 @@ function refresh() {
       v-if="run"
       class="note"
     >
-      绑定运行 {{ run.id.slice(0, 8) }} · 采用该次已保存的情景与时点
+      绑定 {{ run.project_names.join('、') }} · 运行 {{ run.id.slice(0, 8) }} ·
+      采用该次已保存的情景与时点
     </p>
     <form @submit.prevent="submit('create')">
+      <label for="agent-mode">操作方式</label>
+      <select
+        id="agent-mode"
+        v-model="mode"
+        :disabled="busy"
+      >
+        <option value="query">
+          只读问数
+        </option>
+        <option
+          value="change"
+          :disabled="run?.kind !== 'project'"
+        >
+          提出变更草稿
+        </option>
+      </select>
+      <template v-if="mode === 'change'">
+        <p>
+          仅支持一个分期的未售售价比例调整或交付延期。例如：一期未售售价降低5%。需绑定最新输入版本的预测。
+        </p>
+        <label for="agent-known">这项变更何时获知</label>
+        <input
+          id="agent-known"
+          v-model="knownOn"
+          type="date"
+          :disabled="busy"
+        >
+      </template>
       <label for="agent-question">你的问题</label>
       <textarea
         id="agent-question"
@@ -145,14 +218,9 @@ function refresh() {
       />
       <button
         type="submit"
-        :disabled="
-          !enabled ||
-            busy ||
-            !question.trim() ||
-            (current && ['queued', 'running', 'awaiting_reply'].includes(current.status))
-        "
+        :disabled="!enabled || busy || !question.trim()"
       >
-        提交问数
+        {{ mode === 'query' ? '提交问数' : '生成待确认草稿' }}
       </button>
     </form>
     <p
@@ -168,12 +236,42 @@ function refresh() {
     >
       重新读取状态
     </button>
+    <nav aria-label="问数历史分页">
+      <button
+        type="button"
+        :disabled="busy || offset === 0"
+        @click="page(-20)"
+      >
+        较新任务
+      </button>
+      <button
+        type="button"
+        :disabled="busy || tasks.length < 20"
+        @click="page(20)"
+      >
+        更早任务
+      </button>
+    </nav>
     <article
       v-for="task in tasks"
       :key="task.id"
     >
       <b>{{ labels[task.status] }}</b>
       <p>{{ task.question }}</p>
+      <button
+        v-if="task.id !== current?.id"
+        type="button"
+        :disabled="busy"
+        @click="selectedId = task.id"
+      >
+        选择此任务
+      </button>
+      <p
+        v-for="(message, index) in task.dialogue"
+        :key="index"
+      >
+        {{ message.role === 'assistant' ? '追问' : '你的补充' }}：{{ message.content }}
+      </p>
       <p
         v-if="task.error"
         role="alert"
@@ -216,9 +314,43 @@ function refresh() {
           查看绑定运行来源
         </button>
         <p class="note">
-          跨月回答的来源入口展示该指标全周期记录，可按回答月份核对。
+          来源已按回答期间筛选；余额和缺口保留截至对应月份的累计记录。
         </p>
       </template>
+      <section
+        v-if="task.draft"
+        aria-label="变更草稿"
+      >
+        <p>
+          {{ task.draft.project_name }} · {{ task.draft.phase_name }} · 基础版本 v{{
+            task.draft.base_version
+          }}
+        </p>
+        <p>草稿 {{ task.draft.id.slice(0, 8) }} · 获知日期 {{ task.draft.known_on }}</p>
+        <p>
+          {{
+            task.draft.change.field === 'price_change' ? '未售售价（元/平方米）' : '交付月份'
+          }}：{{ task.draft.before }} → {{ task.draft.after }}
+        </p>
+        <p>这是基础参数预览，未叠加情景或工作台临时调整；不是利润测算。</p>
+        <p
+          v-for="warning in task.draft.preview.warnings"
+          :key="warning"
+        >
+          {{ warning }}
+        </p>
+        <p v-if="task.draft.revision_id">
+          已保存新输入版本。请到工作台选择不早于获知日期的信息截止及预测基准，再生成新预测；原预测未改变。
+        </p>
+        <button
+          v-else-if="task.id === current?.id && task.status === 'awaiting_confirmation'"
+          type="button"
+          :disabled="busy"
+          @click="submit('confirm')"
+        >
+          确认此草稿并保存新版本
+        </button>
+      </section>
       <button
         v-if="task.id === current?.id && ['failed', 'interrupted'].includes(task.status)"
         type="button"
@@ -283,6 +415,16 @@ textarea {
   border: 1px solid var(--border);
   border-radius: 5px;
   padding: 7px;
+}
+select,
+input {
+  max-width: 100%;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 6px;
+  font: inherit;
 }
 button {
   color: var(--accent);

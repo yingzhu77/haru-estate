@@ -11,6 +11,7 @@ vi.mock('../../api/client', () => ({
     createAgentTask: vi.fn(),
     replyAgent: vi.fn(),
     resumeAgent: vi.fn(),
+    confirmAgent: vi.fn(),
   },
 }))
 const run: Run = {
@@ -29,7 +30,9 @@ const run: Run = {
   steps: [],
 }
 const task: AgentTask = {
-  calls: 1, attempt: 1,
+  mode: 'query',
+  calls: 1,
+  attempt: 1,
   id: 'task',
   run_id: run.id,
   question: '利润呢？',
@@ -50,6 +53,90 @@ beforeEach(() => {
     model: 'test-only',
   })
   vi.mocked(api.agentTasks).mockResolvedValue([])
+})
+
+it('selects an older pending task and retains its full clarification history', async () => {
+  const older = {
+    ...task,
+    id: 'older',
+    dialogue: [
+      { role: 'assistant' as const, content: '确认看哪个项目？' },
+      { role: 'user' as const, content: '当前范围' },
+    ],
+  }
+  vi.mocked(api.agentTasks).mockResolvedValue([
+    { ...task, id: 'newer', status: 'completed' },
+    older,
+  ])
+  const wrapper = mount(AgentChat, { props: { run } })
+  await flushPromises()
+  await wrapper
+    .findAll('button')
+    .find((button) => button.text() === '选择此任务')!
+    .trigger('click')
+  expect(wrapper.text()).toContain('你的补充：当前范围')
+  await wrapper.get('#agent-reply').setValue('未来12个月')
+  await wrapper.findAll('form')[1]!.trigger('submit')
+  await flushPromises()
+  expect(api.replyAgent).toHaveBeenCalledWith('older', { token: 'token-one', reply: '未来12个月' })
+  wrapper.unmount()
+})
+
+it('binds confirmation to the displayed draft and preserves conflicts for review', async () => {
+  const draft: NonNullable<AgentTask['draft']> = {
+    id: 'draft-one',
+    token: 'approval-one',
+    project_id: 'p',
+    project_name: '模拟',
+    phase_id: 'phase',
+    phase_name: '一期',
+    base_revision_id: 'r',
+    base_version: 1,
+    known_on: '2026-09-24',
+    change: { phase_id: 'phase', field: 'price_change', value: '-0.05' },
+    before: '10000',
+    after: '9500',
+    preview: {
+      project_id: 'p',
+      project_name: '模拟',
+      revision_id: 'r',
+      version: 1,
+      scenario: 'base',
+      scenario_price_percent: '0',
+      scenario_cost_percent: '0',
+      price_percent: '0',
+      cost_percent: '0',
+      future_cost_before: null,
+      future_cost_after: null,
+      collection_lag: 3,
+      extra_collection_delay: 0,
+      phases: [],
+      warnings: [],
+    },
+  }
+  vi.mocked(api.agentTasks).mockResolvedValue([
+    { ...task, mode: 'change', status: 'awaiting_confirmation', draft },
+  ])
+  vi.mocked(api.confirmAgent).mockRejectedValue(new Error('数据已被修订'))
+  const wrapper = mount(AgentChat, { props: { run } })
+  await flushPromises()
+  expect(api.confirmAgent).not.toHaveBeenCalled()
+  await wrapper
+    .findAll('button')
+    .find((button) => button.text() === '确认此草稿并保存新版本')!
+    .trigger('click')
+  await flushPromises()
+  expect(api.confirmAgent).toHaveBeenCalledExactlyOnceWith('task', {
+    draft_id: 'draft-one',
+    token: 'approval-one',
+    project_id: 'p',
+    phase_id: 'phase',
+    base_revision_id: 'r',
+    base_version: 1,
+  })
+  expect(wrapper.text()).toContain('数据已被修订')
+  expect(wrapper.text()).toContain('10000 → 9500')
+  wrapper.unmount()
 })
 it('shows unconfigured state without fabricating an answer or calling a model', async () => {
   vi.mocked(api.agentStatus).mockResolvedValue({

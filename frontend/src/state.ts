@@ -14,7 +14,7 @@ export const state = reactive({
   drafts: {} as Record<string, Dataset>,
   overrides: {} as Record<string, Overrides>,
   error: '',
-  evidence: null as { runId: string; metric: string; month?: string } | null,
+  evidence: null as { runId: string; metric: string; month?: string; months?: string[] } | null,
 })
 export async function refreshProjects() {
   state.projects = await api.projects()
@@ -28,8 +28,8 @@ export function setTheme(theme: 'minimal' | 'acg') {
   localStorage.setItem('haru-theme', theme)
   document.documentElement.dataset.theme = theme
 }
-export function showEvidence(runId: string, metric = 'profit', month?: string) {
-  state.evidence = { runId, metric, month }
+export function showEvidence(runId: string, metric = 'profit', month?: string, months?: string[]) {
+  state.evidence = { runId, metric, month, months }
 }
 export const formatMoney = (value: string | null | undefined) =>
   value == null

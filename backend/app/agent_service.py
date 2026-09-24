@@ -1,4 +1,4 @@
-"""One bounded read-only LangGraph, on the application's existing job executor."""
+"""One bounded LangGraph for queries and proposals; only humans confirm changes."""
 
 import logging
 import sqlite3
@@ -17,6 +17,8 @@ from sqlalchemy.orm import Session
 
 from app import schemas as s
 from app.agent_model import DeepSeekModel, ModelFailure, QueryModel
+from app.domain_changes import apply_change
+from app.domain_parameters import effective_parameters
 from app.domain_query import query_result
 from app.mutations import remember, replay
 from app.storage import AgentTaskRow
@@ -50,6 +52,7 @@ class AgentService:
         builder.add_node("understand", self._understand)
         builder.add_node("clarify", self._clarify)
         builder.add_node("query", self._query)
+        builder.add_node("draft", self._draft)
         builder.add_edge(START, "understand")
         builder.add_conditional_edges(
             "understand",
@@ -57,10 +60,12 @@ class AgentService:
             {
                 "clarify": "clarify",
                 "query": "query",
+                "draft": "draft",
             },
         )
         builder.add_edge("clarify", "understand")
         builder.add_edge("query", END)
+        builder.add_edge("draft", END)
         self.graph = builder.compile(checkpointer=self.saver)
         with application.lock, Session(application.engine) as db, db.begin():
             for row in db.scalars(select(AgentTaskRow).where(AgentTaskRow.status == "running")):
@@ -81,6 +86,17 @@ class AgentService:
 
     @staticmethod
     def _view(row: AgentTaskRow) -> s.AgentTask:
+        dialogue = list(row.payload.get("dialogue", []))
+        if not dialogue:  # older saved tasks already contain plans and reply text
+            replies = iter(row.payload.get("replies", []))
+            for _, plan in sorted(
+                row.payload.get("plans", {}).items(), key=lambda item: int(item[0])
+            ):
+                if plan.get("action") == "clarify":
+                    dialogue.append({"role": "assistant", "content": plan["clarification"]})
+                    reply = next(replies, None)
+                    if reply is not None:
+                        dialogue.append({"role": "user", "content": reply})
         return s.AgentTask.model_validate(
             {
                 **{
@@ -89,6 +105,7 @@ class AgentService:
                     if key in s.AgentTask.model_fields
                 },
                 "status": row.status,
+                "dialogue": dialogue,
             }
         )
 
@@ -117,7 +134,7 @@ class AgentService:
         with Session(self.application.engine) as db:
             return self._view(self._row(db, task_id))
 
-    def list(self, run_id: str) -> list[s.AgentTask]:
+    def list(self, run_id: str, offset: int = 0) -> list[s.AgentTask]:
         self.application.run(run_id)
         with Session(self.application.engine) as db:
             return [
@@ -126,6 +143,7 @@ class AgentService:
                     select(AgentTaskRow)
                     .where(AgentTaskRow.run_id == run_id)
                     .order_by(AgentTaskRow.created_at.desc())
+                    .offset(offset)
                     .limit(20)
                 )
             ]
@@ -140,6 +158,14 @@ class AgentService:
             run = self.application.run(body.run_id)
             if run.status != "completed" or run.result is None:
                 raise HTTPException(409, "只能查询已完成的预测运行")
+            if body.mode == "change":
+                if run.kind != "project" or len(run.project_ids) != 1 or body.known_on is None:
+                    raise HTTPException(422, "变更草稿须绑定单项目预测并明确获知日期")
+                base = self.application.revision(run.project_ids[0])
+                if run.revision_ids != [base.id]:
+                    raise HTTPException(409, "绑定预测已不是最新输入版本，请先用最新版本生成预测")
+                if body.known_on.isoformat() < base.known_on:
+                    raise HTTPException(422, "变更获知日期不能早于基础版本")
             task = s.AgentTask(
                 id=str(uuid4()),
                 run_id=run.id,
@@ -148,6 +174,8 @@ class AgentService:
                 created_at=timestamp(),
                 model=self.model.model,
                 provider=self.model.provider,
+                mode=body.mode,
+                known_on=body.known_on,
             )
             payload = self._event(
                 task.model_dump(mode="json"), "提交问数", "queued", "绑定已完成运行，等待解析"
@@ -181,6 +209,10 @@ class AgentService:
                 {
                     **row.payload,
                     "replies": [*row.payload["replies"], body.reply],
+                    "dialogue": [
+                        *[message.model_dump() for message in self._view(row).dialogue],
+                        {"role": "user", "content": body.reply},
+                    ],
                     "pending_reply": {"token": body.token, "reply": body.reply},
                     "reply_token": None,
                     "error": None,
@@ -196,7 +228,13 @@ class AgentService:
     def resume(self, task_id: str) -> s.AgentTask:
         with self.application.lock, Session(self.application.engine) as db, db.begin():
             row = self._row(db, task_id)
-            if row.status in {"queued", "running", "completed", "awaiting_reply"}:
+            if row.status in {
+                "queued",
+                "running",
+                "completed",
+                "awaiting_reply",
+                "awaiting_confirmation",
+            }:
                 return self._view(row)
             if not self.model.configured:
                 raise HTTPException(503, "DeepSeek 未配置")
@@ -266,15 +304,57 @@ class AgentService:
                 "scenario": run.scenario,
                 "target_months": run.result.target_months,
                 "available_months": [month.month for month in run.result.months],
+                "dialogue": [message.model_dump() for message in self.get(task_id).dialogue],
+                "mode": payload.get("mode", "query"),
+                "phases": [
+                    {"id": phase.id, "name": phase.name}
+                    for phase in self.application.revision(
+                        run.project_ids[0], run.revision_ids[0]
+                    ).data.phases
+                ]
+                if run.kind == "project"
+                else [],
             },
         )
         # Validate even injected adapters: the tool boundary trusts no model implementation.
         plan = s.AgentPlan.model_validate(plan.model_dump())
+        # Model routing is advisory. Independently reject named foreign projects,
+        # portfolio subsets and comparison requests before accessing any amount.
+        latest = " ".join([payload["question"], *payload["replies"]])
+        if payload["replies"] and "当前范围" in payload["replies"][-1]:
+            latest = payload["replies"][-1]
+        mentioned = {p.name for p in self.application.projects() if p.name in latest}
+        mentioned.update(plan.project_names)
+        if plan.action in {"query", "draft"} and (
+            plan.scope != "bound"
+            or bool(mentioned - set(run.project_names))
+            or (run.kind == "portfolio" and bool(mentioned) and mentioned != set(run.project_names))
+            or (
+                run.kind == "project"
+                and any(w in latest for w in ("所有项目", "全部项目", "跨项目", "组合", "对比"))
+            )
+        ):
+            plan = s.AgentPlan(
+                action="clarify",
+                clarification="本任务只绑定“"
+                + "、".join(run.project_names)
+                + "”的这次结果。若要查询其他范围，请打开对应预测；"
+                + "若继续当前范围，请明确说查询当前范围及指标、期间。",
+            )
+        if plan.action == "draft" and payload.get("mode", "query") != "change":
+            plan = s.AgentPlan(
+                action="clarify",
+                clarification="当前是只读问数。请使用变更草稿入口并明确项目、分期和获知日期。",
+            )
         changes: dict[str, Any] = {"plans": {**payload["plans"], round_key: plan.model_dump()}}
         if plan.action == "clarify":
             if payload["calls"] + 1 >= 3:
                 raise ModelFailure("三次解析后仍需澄清，请明确指标和期间后新建任务")
             changes.update(clarification=plan.clarification, reply_token=str(uuid4()))
+            changes["dialogue"] = [
+                *[message.model_dump() for message in self.get(task_id).dialogue],
+                {"role": "assistant", "content": plan.clarification},
+            ]
         self._update(task_id, changes, event=("解析完成", "completed", "只读查询结构已校验"))
         return {"plan": plan.model_dump()}
 
@@ -306,6 +386,97 @@ class AgentService:
             event=("查询结果", "completed", "程序从绑定运行读取金额，保留来源入口"),
         )
         return {}
+
+    def _draft(self, state: GraphState) -> dict[str, Any]:
+        payload = self._payload(state["task_id"])
+        if payload.get("draft"):
+            return {}  # crash after business save, before graph checkpoint
+        task = self.get(state["task_id"])
+        plan = s.AgentPlan.model_validate(state["plan"])
+        run = self.application.run(task.run_id)
+        if task.mode != "change" or run.kind != "project" or not task.known_on or not plan.change:
+            raise ModelFailure("变更必须从单项目草稿入口发起")
+        base = self.application.revision(run.project_ids[0], run.revision_ids[0])
+        try:
+            data, before, after = apply_change(base.data, plan.change, task.known_on)
+            preview = effective_parameters(
+                base.model_copy(update={"data": data}),
+                run.project_names[0],
+                task.known_on,
+                "base",
+                s.Overrides(),
+            )
+        except ValueError as exc:
+            raise ModelFailure(str(exc)) from None
+        phase = next(p for p in data.phases if p.id == plan.change.phase_id)
+        draft = s.ChangeDraft(
+            id=str(uuid4()),
+            token=str(uuid4()),
+            project_id=base.project_id,
+            project_name=run.project_names[0],
+            phase_id=phase.id,
+            phase_name=phase.name,
+            base_revision_id=base.id,
+            base_version=base.version,
+            known_on=task.known_on,
+            change=plan.change,
+            before=before,
+            after=after,
+            preview=preview,
+        )
+        self._update(
+            task.id,
+            {"draft": draft.model_dump(mode="json")},
+            event=("生成草稿", "completed", "程序生成参数预览，等待人工确认；尚未修改输入"),
+        )
+        return {}
+
+    def confirm(self, task_id: str, body: s.ChangeConfirm, key: str) -> s.AgentTask:
+        # Confirmation and revision share one transaction. Models cannot call this method.
+        with self.application.lock, Session(self.application.engine) as db, db.begin():
+            operation = f"agent-confirm:{task_id}"
+            cached = replay(db, key, operation, body)
+            if cached is not None:
+                return s.AgentTask.model_validate(cached)
+            row = self._row(db, task_id)
+            task = self._view(row)
+            draft = task.draft
+            if draft is None or body != s.ChangeConfirm(
+                draft_id=draft.id,
+                token=draft.token,
+                project_id=draft.project_id,
+                phase_id=draft.phase_id,
+                base_revision_id=draft.base_revision_id,
+                base_version=draft.base_version,
+            ):
+                raise HTTPException(409, "确认与原项目、分期、基础版本或草稿不一致")
+            if draft.revision_id:
+                return task
+            if row.status != "awaiting_confirmation":
+                raise HTTPException(409, "草稿尚不可确认")
+            base = self.application.revision(draft.project_id, draft.base_revision_id)
+            data, _, _ = apply_change(base.data, draft.change, draft.known_on)
+            revision = self.application._write_revision(
+                db,
+                draft.project_id,
+                s.RevisionWrite(
+                    base_version=draft.base_version,
+                    known_on=draft.known_on,
+                    note=f"人工确认变更草稿 {draft.id}",
+                    data=data,
+                ),
+            )
+            draft.revision_id = revision.id
+            row.status = "completed"
+            row.payload = self._event(
+                {**row.payload, "draft": draft.model_dump(mode="json")},
+                "人工确认",
+                "completed",
+                "已保存新输入版本；原预测保持不变，请选择新时点重新测算",
+            )
+            result = self._view(row)
+            remember(db, key, operation, body, result)
+            return result
 
     def process_next(self) -> bool:
         with self.application.lock, Session(self.application.engine) as db, db.begin():
@@ -354,14 +525,19 @@ class AgentService:
                     ),
                 )
             else:
+                draft = self._payload(task_id).get("draft")
                 self._update(
                     task_id,
                     {"pending_reply": None},
-                    status="completed",
+                    status="awaiting_confirmation"
+                    if draft and not draft.get("revision_id")
+                    else "completed",
                     event=(
                         "问数完成",
                         "completed",
-                        "答案来自原运行，未修改业务输入或预测",
+                        "草稿已保存，等待人工确认"
+                        if draft
+                        else "答案来自原运行，未修改业务输入或预测",
                     ),
                 )
         except ModelFailure as exc:

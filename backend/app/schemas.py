@@ -451,12 +451,21 @@ AgentMetric = Literal[
 ]
 
 
+class PhaseChange(Model):
+    phase_id: str = Field(min_length=1, max_length=80)
+    field: Literal["price_change", "delivery_delay"]
+    value: Amount
+
+
 class AgentPlan(Model):
-    action: Literal["query", "clarify"]
+    action: Literal["query", "clarify", "draft"]
     metric: AgentMetric | None = None
     period: Literal["next_month", "twelve_month", "lifecycle", "month"] | None = None
     month: Month | None = None
     clarification: str | None = Field(default=None, min_length=1, max_length=500)
+    project_names: list[str] = Field(default_factory=list, max_length=20)
+    scope: Literal["bound", "other", "subset", "compare"] = "bound"
+    change: PhaseChange | None = None
 
     @model_validator(mode="after")
     def valid_action(self) -> "AgentPlan":
@@ -465,6 +474,9 @@ class AgentPlan(Model):
                 raise ValueError("查询必须明确指标和期间")
             if (self.period == "month") != (self.month is not None):
                 raise ValueError("仅单月查询需要指定月份")
+        elif self.action == "draft":
+            if self.change is None:
+                raise ValueError("草稿必须明确分期和白名单调整项")
         elif not self.clarification:
             raise ValueError("澄清需要一个明确的问题")
         return self
@@ -480,6 +492,8 @@ class AgentStatus(Model):
 class AgentCreate(Model):
     run_id: str = Field(min_length=1, max_length=100)
     question: str = Field(min_length=1, max_length=2000)
+    mode: Literal["query", "change"] = "query"
+    known_on: date | None = None
 
 
 class AgentReply(Model):
@@ -500,11 +514,50 @@ class AgentAnswer(Model):
     evidence_month: str | None = None
 
 
+class AgentMessage(Model):
+    role: Literal["assistant", "user"]
+    content: str
+
+
+class ChangeDraft(Model):
+    id: str
+    token: str
+    project_id: str
+    project_name: str
+    phase_id: str
+    phase_name: str
+    base_revision_id: str
+    base_version: int
+    known_on: date
+    change: PhaseChange
+    before: str
+    after: str
+    preview: EffectiveParameters
+    revision_id: str | None = None
+
+
+class ChangeConfirm(Model):
+    draft_id: str
+    token: str
+    project_id: str
+    phase_id: str
+    base_revision_id: str
+    base_version: int
+
+
 class AgentTask(Model):
     id: str
     run_id: str
     question: str
-    status: Literal["queued", "running", "awaiting_reply", "completed", "failed", "interrupted"]
+    status: Literal[
+        "queued",
+        "running",
+        "awaiting_reply",
+        "awaiting_confirmation",
+        "completed",
+        "failed",
+        "interrupted",
+    ]
     created_at: str
     model: str
     provider: str
@@ -515,3 +568,7 @@ class AgentTask(Model):
     answer: AgentAnswer | None = None
     error: str | None = None
     steps: list[Step] = Field(default_factory=list)
+    dialogue: list[AgentMessage] = Field(default_factory=list)
+    mode: Literal["query", "change"] = "query"
+    known_on: date | None = None
+    draft: ChangeDraft | None = None

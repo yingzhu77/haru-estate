@@ -659,7 +659,9 @@ class Service:
             if not self.process_next() and not self.agent.process_next():
                 self.halt.wait(0.2)
 
-    def evidence(self, run_id: str, metric: str, month: str | None) -> s.Evidence:
+    def evidence(
+        self, run_id: str, metric: str, month: str | None, months: list[str] | None = None
+    ) -> s.Evidence:
         run = self.run(run_id)
         related = {
             "profit": {"revenue", "cogs", "expenses", "taxes", "interest"},
@@ -704,6 +706,8 @@ class Service:
                 for r in run.result.sources
                 if r.metric in metrics and run.result.target_months[0] <= r.month <= end
             ]
+        if months and not cumulative:
+            sources = [source for source in sources if source.month in months]
         return s.Evidence(
             run_id=run_id,
             metric=metric,

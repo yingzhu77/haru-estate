@@ -32,7 +32,12 @@ watch(
     if (!selection) return
     loading.value = true
     try {
-      const result = await api.evidence(selection.runId, selection.metric, selection.month)
+      const result = await api.evidence(
+        selection.runId,
+        selection.metric,
+        selection.month,
+        selection.months,
+      )
       if (sequence === requestSequence) evidence.value = result
     } catch (e) {
       if (sequence === requestSequence) error.value = e instanceof Error ? e.message : String(e)
@@ -86,7 +91,8 @@ onBeforeUnmount(() => {
     />
     <template v-else-if="evidence">
       <p class="muted">
-        运行 {{ evidence.run_id }} · {{ evidence.month || '全周期' }} · 指标
+        运行 {{ evidence.run_id }} ·
+        {{ evidence.month || state.evidence?.months?.join('、') || '全周期' }} · 指标
         {{ evidence.metric }}
       </p>
       <p class="muted">

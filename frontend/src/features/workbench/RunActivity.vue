@@ -12,7 +12,7 @@ import { showEvidence, state } from '../../state'
 import { statusLabels } from './useWorkbench'
 import AgentChat from './AgentChat.vue'
 defineProps<{ run: Run | null; busy: boolean; pollError: string }>()
-const emit = defineEmits<{ resume: []; refresh: [] }>()
+const emit = defineEmits<{ resume: []; refresh: []; confirmed: [] }>()
 const timeLabel = (value: string) => {
   const date = new Date(value)
   return Number.isNaN(date.getTime())
@@ -175,7 +175,10 @@ const timeLabel = (value: string) => {
         </li>
       </ul>
     </div>
-    <AgentChat :run="run" />
+    <AgentChat
+      :run="run"
+      @confirmed="emit('confirmed')"
+    />
     <div class="activity-card explainer">
       <b>每一个数字，都有来处</b>
       <p>销售、回款与收入确认分开计算；开发投入、成本结转和实际付款分别追踪。</p>

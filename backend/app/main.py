@@ -1,6 +1,7 @@
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import Annotated
 from uuid import uuid4
 
 from fastapi import FastAPI, Header, Query, UploadFile
@@ -110,10 +111,10 @@ def agent_create(
 
 
 @app.get("/api/v1/agent/tasks", response_model=list[s.AgentTask])
-def agent_tasks(run_id: str) -> object:
+def agent_tasks(run_id: str, offset: int = Query(0, ge=0)) -> object:
     from app.application import service
 
-    return service.agent.list(run_id)
+    return service.agent.list(run_id, offset)
 
 
 @app.get("/api/v1/agent/tasks/{task_id}", response_model=s.AgentTask)
@@ -146,6 +147,17 @@ def projects() -> object:
     from app.application import service
 
     return service.projects()
+
+
+@app.post("/api/v1/agent/tasks/{task_id}/confirm", response_model=s.AgentTask)
+def agent_confirm(
+    task_id: str,
+    body: s.ChangeConfirm,
+    idempotency_key: str = Header(min_length=8, max_length=128),
+) -> object:
+    from app.application import service
+
+    return service.agent.confirm(task_id, body, idempotency_key)
 
 
 @app.post("/api/v1/projects", response_model=s.Project)
@@ -283,8 +295,11 @@ def resume(run_id: str) -> object:
 
 @app.get("/api/v1/runs/{run_id}/evidence", response_model=s.Evidence)
 def evidence(
-    run_id: str, metric: str = Query(default="profit"), month: str | None = None
+    run_id: str,
+    metric: str = Query(default="profit"),
+    month: s.Month | None = None,
+    months: Annotated[list[s.Month] | None, Query(max_length=240)] = None,
 ) -> object:
     from app.application import service
 
-    return service.evidence(run_id, metric, month)
+    return service.evidence(run_id, metric, month, months)
