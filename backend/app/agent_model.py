@@ -26,9 +26,15 @@ class QueryModel(Protocol):
 class DeepSeekModel:
     provider = "DeepSeek"
 
-    def __init__(self, *, transport: httpx.BaseTransport | None = None) -> None:
-        self._key = os.environ.get("DEEPSEEK_API_KEY", "").strip()
-        self.model = os.environ.get("DEEPSEEK_MODEL", "").strip()
+    def __init__(
+        self,
+        *,
+        transport: httpx.BaseTransport | None = None,
+        api_key: str | None = None,
+        model: str | None = None,
+    ) -> None:
+        self._key = (os.environ.get("DEEPSEEK_API_KEY", "") if api_key is None else api_key).strip()
+        self.model = (os.environ.get("DEEPSEEK_MODEL", "") if model is None else model).strip()
         self.configured = bool(self._key and self.model)
         self._transport = transport
 

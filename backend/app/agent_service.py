@@ -1,9 +1,10 @@
 """One bounded LangGraph for queries and proposals; only humans confirm changes."""
 
 import logging
+import secrets
 import sqlite3
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, NotRequired, TypedDict
+from typing import TYPE_CHECKING, Any, Literal, NotRequired, TypedDict
 from uuid import uuid4
 
 from fastapi import HTTPException
@@ -41,6 +42,11 @@ class AgentService:
     def __init__(self, application: "Service", model: QueryModel | None = None) -> None:
         self.application = application
         self.model: QueryModel = model or DeepSeekModel()
+        self.configuration_source: Literal["environment", "memory", "none"] = (
+            "environment" if self.model.configured else "none"
+        )
+        self.configuration_token = secrets.token_urlsafe(32)
+        self.configuring = False
         self.connection = sqlite3.connect(
             application.directory / "agent-checkpoints.sqlite3",
             check_same_thread=False,
@@ -83,6 +89,58 @@ class AgentService:
             provider=self.model.provider,
             model=self.model.model,
         )
+
+    def configuration_status(self) -> s.ModelConfigurationStatus:
+        with self.application.lock:
+            return s.ModelConfigurationStatus(
+                configured=self.model.configured,
+                model=self.model.model,
+                source=self.configuration_source,
+                csrf_token=self.configuration_token,
+            )
+
+    def configure(self, body: s.ModelConfiguration | None) -> s.ModelConfigurationStatus:
+        with self.application.lock, Session(self.application.engine) as db:
+            if self.configuring or db.scalar(
+                select(AgentTaskRow.id)
+                .where(AgentTaskRow.status.in_(["queued", "running"]))
+                .limit(1)
+            ):
+                raise HTTPException(409, "模型正在处理任务或测试连接，请稍后再配置")
+            self.configuring = True
+        try:
+            candidate = DeepSeekModel(
+                api_key=body.api_key.get_secret_value() if body else "",
+                model=body.model if body else "",
+            )
+            if body:
+                # Only synthetic routing metadata; no project data or task is persisted.
+                candidate.plan(
+                    "未来12个月利润是多少？",
+                    [],
+                    {
+                        "mode": "query",
+                        "project_names": ["连接测试"],
+                        "scope_kind": "project",
+                        "scenario": "base",
+                        "target_months": ["2026-09"],
+                        "available_months": ["2026-09"],
+                        "phases": [],
+                        "dialogue": [],
+                    },
+                )
+            with self.application.lock:
+                self.model = candidate
+                self.configuration_source = "memory" if body else "none"
+            return self.configuration_status()
+        except Exception:
+            # Never include provider exceptions, response text or submitted credentials.
+            raise HTTPException(
+                502, "连接测试失败，原配置保持不变。请核对密钥、模型名称或网络后重试。"
+            ) from None
+        finally:
+            with self.application.lock:
+                self.configuring = False
 
     @staticmethod
     def _view(row: AgentTaskRow) -> s.AgentTask:
@@ -150,6 +208,8 @@ class AgentService:
 
     def create(self, body: s.AgentCreate, key: str) -> s.AgentTask:
         with self.application.lock, Session(self.application.engine) as db, db.begin():
+            if self.configuring:
+                raise HTTPException(409, "模型正在测试连接，请稍后提交")
             cached = replay(db, key, "agent-create", body)
             if cached is not None:
                 return s.AgentTask.model_validate(cached)
@@ -195,10 +255,14 @@ class AgentService:
 
     def reply(self, task_id: str, body: s.AgentReply, key: str) -> s.AgentTask:
         with self.application.lock, Session(self.application.engine) as db, db.begin():
+            if self.configuring:
+                raise HTTPException(409, "模型正在测试连接，请稍后补充")
             operation = f"agent-reply:{task_id}"
             cached = replay(db, key, operation, body)
             if cached is not None:
                 return s.AgentTask.model_validate(cached)
+            if not self.model.configured:
+                raise HTTPException(503, "请先配置模型，再继续补充回答")
             row = self._row(db, task_id)
             if row.status != "awaiting_reply" or row.payload.get("reply_token") != body.token:
                 raise HTTPException(409, "澄清问题已变化或已经回答，请刷新任务")
@@ -227,6 +291,8 @@ class AgentService:
 
     def resume(self, task_id: str) -> s.AgentTask:
         with self.application.lock, Session(self.application.engine) as db, db.begin():
+            if self.configuring:
+                raise HTTPException(409, "模型正在测试连接，请稍后恢复")
             row = self._row(db, task_id)
             if row.status in {
                 "queued",
@@ -480,6 +546,8 @@ class AgentService:
 
     def process_next(self) -> bool:
         with self.application.lock, Session(self.application.engine) as db, db.begin():
+            if self.configuring:
+                return False
             row = db.scalar(
                 select(AgentTaskRow)
                 .where(AgentTaskRow.status == "queued")

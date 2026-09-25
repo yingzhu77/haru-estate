@@ -4,7 +4,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 
 Month = Annotated[str, Field(pattern=r"^20\d{2}-(0[1-9]|1[0-2])$")]
 Amount = Annotated[str, Field(pattern=r"^-?\d+(\.\d{1,8})?$", max_length=24)]
@@ -487,6 +487,24 @@ class AgentStatus(Model):
     provider: str
     model: str
     max_calls: int = 3
+
+
+class ModelConfiguration(Model):
+    api_key: SecretStr = Field(min_length=1, max_length=512)
+    model: str = Field(min_length=1, max_length=100, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]*$")
+
+    @model_validator(mode="after")
+    def separate_credentials(self) -> "ModelConfiguration":
+        if self.model.startswith("sk-") or self.model == self.api_key.get_secret_value():
+            raise ValueError("模型名称不能填写密钥")
+        return self
+
+
+class ModelConfigurationStatus(Model):
+    configured: bool
+    model: str
+    source: Literal["environment", "memory", "none"]
+    csrf_token: str
 
 
 class AgentCreate(Model):

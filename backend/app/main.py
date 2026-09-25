@@ -52,7 +52,11 @@ async def http_error(request: Request, exc: HTTPException) -> JSONResponse:
 
 @app.exception_handler(RequestValidationError)
 async def validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
-    messages = "; ".join(str(e["msg"]) for e in exc.errors())
+    messages = (
+        "配置格式无效，请检查密钥与模型名称。"
+        if request.url.path == "/api/v1/model-config"
+        else "; ".join(str(e["msg"]) for e in exc.errors())
+    )
     return JSONResponse(
         status_code=422,
         content={
@@ -66,10 +70,30 @@ async def validation_error(request: Request, exc: RequestValidationError) -> JSO
 @app.middleware("http")
 async def request_context(request: Request, call_next: RequestResponseEndpoint) -> Response:
     request.state.request_id = str(uuid4())
+    configuration = request.url.path.rstrip("/") == "/api/v1/model-config"
+    if configuration:
+        from app.application import service
+        from app.config_security import allowed
+
+        if not allowed(request, service.agent.configuration_token):
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "code": "FORBIDDEN",
+                    "message": "请从本机应用页面打开模型配置。",
+                    "request_id": request.state.request_id,
+                },
+                headers={"Cache-Control": "no-store"},
+            )
     try:
         response = await call_next(request)
     except Exception:
-        logging.getLogger(__name__).exception("Request failed: %s", request.state.request_id)
+        if configuration:
+            logging.getLogger(__name__).error(
+                "Configuration request failed: %s", request.state.request_id
+            )
+        else:
+            logging.getLogger(__name__).exception("Request failed: %s", request.state.request_id)
         response = JSONResponse(
             status_code=500,
             content={
@@ -79,7 +103,30 @@ async def request_context(request: Request, call_next: RequestResponseEndpoint) 
             },
         )
     response.headers["X-Request-ID"] = request.state.request_id
+    if configuration:
+        response.headers["Cache-Control"] = "no-store"
     return response
+
+
+@app.get("/api/v1/model-config", response_model=s.ModelConfigurationStatus)
+def model_configuration() -> object:
+    from app.application import service
+
+    return service.agent.configuration_status()
+
+
+@app.put("/api/v1/model-config", response_model=s.ModelConfigurationStatus)
+def configure_model(body: s.ModelConfiguration) -> object:
+    from app.application import service
+
+    return service.agent.configure(body)
+
+
+@app.delete("/api/v1/model-config", response_model=s.ModelConfigurationStatus)
+def clear_model() -> object:
+    from app.application import service
+
+    return service.agent.configure(None)
 
 
 @app.get("/api/v1/health")

@@ -14,6 +14,7 @@ export const state = reactive({
   drafts: {} as Record<string, Dataset>,
   overrides: {} as Record<string, Overrides>,
   error: '',
+  modelConfigurationVersion: 0,
   evidence: null as { runId: string; metric: string; month?: string; months?: string[] } | null,
 })
 export async function refreshProjects() {

@@ -3,6 +3,7 @@ import { onMounted } from 'vue'
 import { Sunny, Moon, ArrowRight } from '@element-plus/icons-vue'
 import { state, setTheme, refreshProjects } from './state'
 import EvidenceDrawer from './features/evidence/EvidenceDrawer.vue'
+import ModelSettings from './features/settings/ModelSettings.vue'
 setTheme(state.theme)
 onMounted(() =>
   refreshProjects().catch((e: Error) => {
@@ -33,6 +34,7 @@ onMounted(() =>
       </nav>
       <div class="header-actions">
         <span class="demo-badge">模拟演示 · 非真实经营数据</span>
+        <ModelSettings />
         <div
           class="theme-switch"
           aria-label="主题切换"

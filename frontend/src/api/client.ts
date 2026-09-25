@@ -67,6 +67,18 @@ async function mutate<T>(path: string, method: string, body: unknown): Promise<T
   }
 }
 export const api = {
+  modelConfiguration: () => request<S['ModelConfigurationStatus']>('/model-config', {
+    cache: 'no-store', headers: { 'X-Haru-Config': '1' },
+  }),
+  configureModel: (body: S['ModelConfiguration'], token: string) =>
+    request<S['ModelConfigurationStatus']>('/model-config', {
+      method: 'PUT', cache: 'no-store', body: JSON.stringify(body),
+      headers: { 'X-Haru-Config': '1', 'X-Haru-CSRF': token },
+    }),
+  clearModel: (token: string) => request<S['ModelConfigurationStatus']>('/model-config', {
+    method: 'DELETE', cache: 'no-store', body: '{}',
+    headers: { 'X-Haru-Config': '1', 'X-Haru-CSRF': token },
+  }),
   agentStatus: () => request<S['AgentStatus']>('/agent/status'),
   agentTasks: (runId: string, offset = 0) =>
     request<S['AgentTask'][]>(`/agent/tasks?run_id=${encodeURIComponent(runId)}&offset=${offset}`),

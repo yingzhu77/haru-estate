@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { api } from '../../api/client'
 import type { AgentStatus, AgentTask, Run } from '../../api/types'
-import { showEvidence } from '../../state'
+import { showEvidence, state } from '../../state'
 
 const props = defineProps<{ run: Run | null }>()
 const emit = defineEmits<{ confirmed: [] }>()
@@ -145,6 +145,7 @@ function refresh() {
   clearTimeout(timer)
   void load(generation, props.run?.id)
 }
+watch(() => state.modelConfigurationVersion, refresh)
 </script>
 
 <template>
