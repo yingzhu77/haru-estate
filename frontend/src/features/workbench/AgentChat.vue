@@ -17,6 +17,7 @@ const reply = ref('')
 const error = ref('')
 const busy = ref(false)
 let generation = 0
+let readSequence = 0
 let timer: ReturnType<typeof setTimeout> | undefined
 const current = computed(
   () => tasks.value.find((task) => task.id === selectedId.value) ?? tasks.value[0],
@@ -38,19 +39,21 @@ const labels: Record<AgentTask['status'], string> = {
   interrupted: '服务中断，可继续',
 }
 async function load(token: number, runId?: string) {
+  const read = ++readSequence
   try {
     const [configuration, saved] = await Promise.all([
       api.agentStatus(),
       runId ? api.agentTasks(runId, offset.value) : Promise.resolve([]),
     ])
-    if (generation !== token) return
+    if (generation !== token || read !== readSequence) return
     status.value = configuration
     tasks.value = saved
+    if (!selectedId.value && saved[0]) selectedId.value = saved[0].id
     if (saved.some((task) => ['queued', 'running'].includes(task.status))) {
       timer = setTimeout(() => void load(token, runId), 1200)
     }
   } catch (cause) {
-    if (generation === token)
+    if (generation === token && read === readSequence)
       error.value = cause instanceof Error ? cause.message : '问数状态读取失败'
   }
 }
@@ -80,6 +83,7 @@ async function submit(action: 'create' | 'reply' | 'resume' | 'confirm') {
   const token = generation
   const runId = props.run.id
   busy.value = true
+  ++readSequence
   error.value = ''
   clearTimeout(timer)
   try {

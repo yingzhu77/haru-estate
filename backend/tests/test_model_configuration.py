@@ -165,3 +165,14 @@ def test_clearing_configuration_preserves_pending_reply(tmp_path: Path) -> None:
     assert exc.value.status_code == 503
     assert service.agent.get(task.id) == waiting
     service.stop()
+
+
+@pytest.mark.parametrize(
+    "key,model",
+    [("   ", "test-model"), (" secret-value ", "secret-value"), ("secret", "SK-credential")],
+)
+def test_rejects_blank_and_disguised_credentials(key: str, model: str) -> None:
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        ModelConfiguration(api_key=key, model=model)

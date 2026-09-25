@@ -186,6 +186,15 @@ def test_change_arithmetic_has_independent_values_and_rejects_invalid_changes(
     assert (before, after) == ("12345.67", "11728.39")
     assert data.phases[0].price == "12345.67"
     assert changed.phases[0].known_on == date(2026, 9, 24)
+    tiny = data.model_copy(deep=True)
+    tiny.phases[0].price = "0.01"
+    with pytest.raises(ValueError, match="大于零"):
+        apply_change(
+            tiny,
+            PhaseChange(phase_id=phase_id, field="price_change", value="-0.9"),
+            date(2026, 9, 24),
+        )
+    assert tiny.phases[0].price == "0.01"
     for field, value, phase in [
         ("price_change", "-1", phase_id),
         ("delivery_delay", "1.5", phase_id),

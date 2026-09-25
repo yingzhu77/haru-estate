@@ -22,6 +22,8 @@ def apply_change(data: Dataset, change: PhaseChange, known_on: date) -> tuple[Da
             raise ValueError("未售售价调整须在-90%至200%之间")
         before = phase.price
         phase.price = money(Decimal(before) * (1 + value))
+        if Decimal(phase.price) <= 0:
+            raise ValueError("调整后的未售售价按分舍入后必须大于零")
         after = phase.price
     else:
         if value != value.to_integral_value() or not 0 <= value <= 36:

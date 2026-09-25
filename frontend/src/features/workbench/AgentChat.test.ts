@@ -3,6 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { api } from '../../api/client'
 import type { AgentTask, Run } from '../../api/types'
 import AgentChat from './AgentChat.vue'
+import { state } from '../../state'
 
 vi.mock('../../api/client', () => ({
   api: {
@@ -184,5 +185,39 @@ it('ignores a late response after switching the bound run', async () => {
   await flushPromises()
   expect(wrapper.text()).not.toContain('请明确期间')
   expect(wrapper.text()).toContain('run-two')
+  wrapper.unmount()
+})
+
+it('ignores a stale refresh on the same run', async () => {
+  let resolveOld!: (tasks: AgentTask[]) => void
+  vi.mocked(api.agentTasks).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        resolveOld = resolve
+      }),
+  )
+  const wrapper = mount(AgentChat, { props: { run } })
+  vi.mocked(api.agentTasks).mockResolvedValue([{ ...task, status: 'completed' }])
+  state.modelConfigurationVersion++
+  await flushPromises()
+  resolveOld([task])
+  await flushPromises()
+  expect(wrapper.find('#agent-reply').exists()).toBe(false)
+  expect(wrapper.text()).toContain('回答已保存')
+  wrapper.unmount()
+})
+
+it('keeps an active clarification when another window adds a newer task', async () => {
+  vi.mocked(api.agentTasks).mockResolvedValue([task])
+  const wrapper = mount(AgentChat, { props: { run } })
+  await flushPromises()
+  await wrapper.get('#agent-reply').setValue('正在补充的期间')
+  vi.mocked(api.agentTasks).mockResolvedValue([
+    { ...task, id: 'new-task', status: 'completed' },
+    task,
+  ])
+  state.modelConfigurationVersion++
+  await flushPromises()
+  expect((wrapper.get('#agent-reply').element as HTMLTextAreaElement).value).toBe('正在补充的期间')
   wrapper.unmount()
 })

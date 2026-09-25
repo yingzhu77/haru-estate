@@ -495,8 +495,12 @@ class ModelConfiguration(Model):
 
     @model_validator(mode="after")
     def separate_credentials(self) -> "ModelConfiguration":
-        if self.model.startswith("sk-") or self.model == self.api_key.get_secret_value():
+        key = self.api_key.get_secret_value().strip()
+        if not key:
+            raise ValueError("密钥不能为空")
+        if self.model.lower().startswith("sk-") or self.model == key:
             raise ValueError("模型名称不能填写密钥")
+        self.api_key = SecretStr(key)
         return self
 
 

@@ -64,3 +64,33 @@ it('forgets unsent credentials on close', async () => {
   await flushPromises()
   expect((wrapper.get('#model-api-key').element as HTMLInputElement).value).toBe('')
 })
+
+it('does not reuse a stale configuration after reopening fails to load', async () => {
+  await fill()
+  await wrapper
+    .findAll('button')
+    .find((button) => button.text() === '关闭')!
+    .trigger('click')
+  vi.mocked(api.modelConfiguration).mockRejectedValue(new Error('offline'))
+  await wrapper.get('button').trigger('click')
+  await flushPromises()
+  await wrapper.get('#model-api-key').setValue('synthetic-secret')
+  await wrapper.get('form').trigger('submit')
+  expect(api.configureModel).not.toHaveBeenCalled()
+})
+
+it('recovers server status after a lost success response without retaining a key', async () => {
+  await fill()
+  vi.mocked(api.configureModel).mockRejectedValue(new Error('response lost'))
+  vi.mocked(api.modelConfiguration).mockResolvedValue({
+    ...status,
+    configured: true,
+    model: 'test-model',
+    source: 'memory',
+  })
+  await wrapper.get('form').trigger('submit')
+  await flushPromises()
+  expect(wrapper.text()).toContain('已配置')
+  expect(api.modelConfiguration).toHaveBeenCalledTimes(2)
+  expect((wrapper.get('#model-api-key').element as HTMLInputElement).value).toBe('')
+})

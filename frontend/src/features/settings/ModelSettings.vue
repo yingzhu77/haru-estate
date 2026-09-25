@@ -21,6 +21,7 @@ watch(open, async (visible) => {
   error.value = ''
   message.value = ''
   if (!visible) return
+  configuration.value = null
   loading.value = true
   try {
     const result = await api.modelConfiguration()
@@ -37,6 +38,7 @@ watch(open, async (visible) => {
 async function save() {
   if (busy.value || !configuration.value || !key.value.trim() || !model.value.trim()) return
   busy.value = true
+  const current = ++generation
   error.value = ''
   message.value = ''
   const pending = api.configureModel(
@@ -45,11 +47,23 @@ async function save() {
   )
   key.value = ''
   try {
-    configuration.value = await pending
+    const result = await pending
     state.modelConfigurationVersion++
-    message.value = '连接测试成功，配置已在本次后端运行中生效。'
+    if (generation === current) {
+      configuration.value = result
+      message.value = '连接测试成功，配置已在本次后端运行中生效。'
+    }
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : '配置失败，请重新输入密钥后重试。'
+    state.modelConfigurationVersion++
+    if (generation === current) {
+      error.value = cause instanceof Error ? cause.message : '配置失败，请重新输入密钥后重试。'
+      try {
+        const result = await api.modelConfiguration()
+        if (generation === current) configuration.value = result
+      } catch {
+        if (generation === current) configuration.value = null
+      }
+    }
   } finally {
     busy.value = false
   }
@@ -58,15 +72,23 @@ async function save() {
 async function clear() {
   if (busy.value || !configuration.value) return
   busy.value = true
+  const current = ++generation
   key.value = ''
   error.value = ''
   message.value = ''
   try {
-    configuration.value = await api.clearModel(configuration.value.csrf_token)
+    const result = await api.clearModel(configuration.value.csrf_token)
     state.modelConfigurationVersion++
-    message.value = '已清除本次运行配置。表单测算、历史和来源仍可使用。'
+    if (generation === current) {
+      configuration.value = result
+      message.value = '已清除本次运行配置。表单测算、历史和来源仍可使用。'
+    }
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : '清除失败，请稍后重试。'
+    state.modelConfigurationVersion++
+    if (generation === current) {
+      configuration.value = null
+      error.value = cause instanceof Error ? cause.message : '清除失败，请重新打开弹窗核对状态。'
+    }
   } finally {
     busy.value = false
   }
@@ -77,6 +99,7 @@ async function clear() {
   <button
     class="model-settings-entry"
     type="button"
+    :disabled="busy"
     @click="open = true"
   >
     <el-icon><Setting /></el-icon><span>模型配置</span>

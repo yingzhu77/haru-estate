@@ -68,6 +68,42 @@ QUERY = AgentPlan(action="query", metric="profit", period="twelve_month")
 CLARIFY = AgentPlan(action="clarify", clarification="请确认未来12个月还是指定某个月？")
 
 
+@pytest.mark.parametrize(
+    "failure", ["unauthorized", "timeout", "redirect", "oversized", "truncated", "invalid-json"]
+)
+def test_provider_failures_are_bounded_and_sanitized(failure: str) -> None:
+    calls = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url)
+        if failure == "timeout":
+            raise httpx.ReadTimeout("secret-provider-detail", request=request)
+        if failure == "unauthorized":
+            return httpx.Response(401, text="secret-provider-detail")
+        if failure == "redirect":
+            return httpx.Response(302, headers={"Location": "https://untrusted.example"})
+        if failure == "oversized":
+            return httpx.Response(200, content=b"x" * 70000)
+        if failure == "invalid-json":
+            return httpx.Response(200, text="secret-provider-detail")
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {"finish_reason": "length", "message": {"content": QUERY.model_dump_json()}}
+                ]
+            },
+        )
+
+    adapter = DeepSeekModel(
+        api_key="synthetic-key", model="test-model", transport=httpx.MockTransport(respond)
+    )
+    with pytest.raises(ModelFailure) as exc:
+        adapter.plan("利润", [], {})
+    assert "secret-provider-detail" not in str(exc.value)
+    assert len(calls) == 1 and calls[0].host == "api.deepseek.com"
+
+
 def test_query_is_frozen_read_only_idempotent_and_persisted(tmp_path: Path) -> None:
     model = DeterministicModel([QUERY])
     service = Service(tmp_path, agent_model=model)
