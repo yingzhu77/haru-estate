@@ -2736,6 +2736,40 @@
               ],
               "title": "Months"
             }
+          },
+          {
+            "name": "month_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^20\\d{2}-(0[1-9]|1[0-2])$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Month From"
+            }
+          },
+          {
+            "name": "month_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^20\\d{2}-(0[1-9]|1[0-2])$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Month To"
+            }
           }
         ],
         "responses": {

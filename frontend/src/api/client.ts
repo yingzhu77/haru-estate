@@ -66,19 +66,47 @@ async function mutate<T>(path: string, method: string, body: unknown): Promise<T
     throw error
   }
 }
+function evidencePeriod(month?: string, months?: string[]): string {
+  const params = new URLSearchParams()
+  if (month) params.set('month', month)
+  const selected = [...new Set(months ?? [])].sort()
+  const index = (value: string) => Number(value.slice(0, 4)) * 12 + Number(value.slice(5))
+  const continuous =
+    selected.length > 1 &&
+    selected.every(
+      (value, i) =>
+        /^\d{4}-(0[1-9]|1[0-2])$/.test(value) &&
+        (i === 0 || index(value) === index(selected[i - 1]!) + 1),
+    )
+  if (!month && continuous) {
+    params.set('month_from', selected[0]!)
+    params.set('month_to', selected[selected.length - 1]!)
+  } else {
+    selected.forEach((value) => params.append('months', value))
+  }
+  return params.size ? `&${params}` : ''
+}
+
 export const api = {
-  modelConfiguration: () => request<S['ModelConfigurationStatus']>('/model-config', {
-    cache: 'no-store', headers: { 'X-Haru-Config': '1' },
-  }),
+  modelConfiguration: () =>
+    request<S['ModelConfigurationStatus']>('/model-config', {
+      cache: 'no-store',
+      headers: { 'X-Haru-Config': '1' },
+    }),
   configureModel: (body: S['ModelConfiguration'], token: string) =>
     request<S['ModelConfigurationStatus']>('/model-config', {
-      method: 'PUT', cache: 'no-store', body: JSON.stringify(body),
+      method: 'PUT',
+      cache: 'no-store',
+      body: JSON.stringify(body),
       headers: { 'X-Haru-Config': '1', 'X-Haru-CSRF': token },
     }),
-  clearModel: (token: string) => request<S['ModelConfigurationStatus']>('/model-config', {
-    method: 'DELETE', cache: 'no-store', body: '{}',
-    headers: { 'X-Haru-Config': '1', 'X-Haru-CSRF': token },
-  }),
+  clearModel: (token: string) =>
+    request<S['ModelConfigurationStatus']>('/model-config', {
+      method: 'DELETE',
+      cache: 'no-store',
+      body: '{}',
+      headers: { 'X-Haru-Config': '1', 'X-Haru-CSRF': token },
+    }),
   agentStatus: () => request<S['AgentStatus']>('/agent/status'),
   agentTasks: (runId: string, offset = 0) =>
     request<S['AgentTask'][]>(`/agent/tasks?run_id=${encodeURIComponent(runId)}&offset=${offset}`),
@@ -150,7 +178,7 @@ export const api = {
   resume: (id: string) => request<Run>(`/runs/${id}/resume`, { method: 'POST' }),
   evidence: (id: string, metric = 'profit', month?: string, months?: string[]) =>
     request<Evidence>(
-      `/runs/${id}/evidence?metric=${encodeURIComponent(metric)}${month ? `&month=${encodeURIComponent(month)}` : ''}${(months ?? []).map((value) => `&months=${encodeURIComponent(value)}`).join('')}`,
+      `/runs/${id}/evidence?metric=${encodeURIComponent(metric)}${evidencePeriod(month, months)}`,
     ),
   compare: (left: string, right: string) =>
     request<Comparison>(

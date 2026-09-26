@@ -5,6 +5,13 @@ export default defineConfig({
   server: { proxy: { '/api': process.env.HARU_API_PROXY || 'http://127.0.0.1:8000' } },
   test: { environment: 'jsdom', include: ['src/**/*.test.ts'] },
   build: {
-    rollupOptions: { output: { manualChunks: { charts: ['echarts'], ui: ['element-plus'] } } },
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (/[\\/]node_modules[\\/](echarts|zrender)[\\/]/.test(id)) return 'charts'
+          if (/[\\/]node_modules[\\/]element-plus[\\/]/.test(id)) return 'ui'
+        },
+      },
+    },
   },
 })

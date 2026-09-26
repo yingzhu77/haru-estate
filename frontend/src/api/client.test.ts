@@ -3,6 +3,31 @@ import { webcrypto } from 'node:crypto'
 import { api, ApiRequestError } from './client'
 
 afterEach(() => vi.unstubAllGlobals())
+it('uses a short inclusive range for 600 continuous evidence months', async () => {
+  const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({})))
+  vi.stubGlobal('fetch', fetcher)
+  const months = Array.from(
+    { length: 600 },
+    (_, i) => `${2026 + Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, '0')}`,
+  )
+  await api.evidence('run', 'profit', undefined, months)
+  const path = String(fetcher.mock.calls[0]?.[0])
+  const params = new URL(path, 'http://localhost').searchParams
+  expect(params.get('month_from')).toBe('2026-01')
+  expect(params.get('month_to')).toBe('2075-12')
+  expect(params.has('months')).toBe(false)
+  expect(path.length).toBeLessThan(150)
+})
+
+it('preserves gaps in a non-continuous evidence selection', async () => {
+  const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({})))
+  vi.stubGlobal('fetch', fetcher)
+  await api.evidence('run', 'profit', undefined, ['2026-03', '2026-01', '2026-03'])
+  const params = new URL(String(fetcher.mock.calls[0]?.[0]), 'http://localhost').searchParams
+  expect(params.getAll('months')).toEqual(['2026-01', '2026-03'])
+  expect(params.has('month_from')).toBe(false)
+})
+
 describe('mutation retry contract', () => {
   it('reuses the key after a lost response, then starts a fresh operation after success', async () => {
     vi.stubGlobal('crypto', webcrypto)

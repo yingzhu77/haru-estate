@@ -346,7 +346,18 @@ def evidence(
     metric: str = Query(default="profit"),
     month: s.Month | None = None,
     months: Annotated[list[s.Month] | None, Query(max_length=240)] = None,
+    month_from: s.Month | None = None,
+    month_to: s.Month | None = None,
 ) -> object:
     from app.application import service
+    from app.domain import month_range
+
+    if month_from is not None or month_to is not None:
+        if not month_from or not month_to or month or months or month_from > month_to:
+            raise HTTPException(422, "来源期间须提供完整起止月份，且不能与其他月份筛选混用")
+        try:
+            months = month_range(month_from, month_to)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
 
     return service.evidence(run_id, metric, month, months)

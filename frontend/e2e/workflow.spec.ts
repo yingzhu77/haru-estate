@@ -6,7 +6,16 @@ test('new project, real forecast, themes, evidence, frozen portfolio and history
 }) => {
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
+  page.on('console', (message) => {
+    if (message.text().includes('Failed to resolve component')) errors.push(message.text())
+  })
   const name = `浏览器验收模拟-${Date.now()}`
+  const partnerName = `${name}-汇总成员`
+  const partner = await request.post('/api/v1/projects', {
+    headers: { 'Idempotency-Key': `portfolio-partner-${Date.now()}` },
+    data: { name: partnerName, template: 'demo' },
+  })
+  expect(partner.ok()).toBe(true)
   await page.goto('/projects')
   await page.getByRole('textbox', { name: '新项目名称' }).fill(name)
   await page.getByText('模拟模板', { exact: true }).click()
@@ -34,17 +43,18 @@ test('new project, real forecast, themes, evidence, frozen portfolio and history
   await expect(page.getByText('delivery-recognition', { exact: true }).first()).toBeVisible()
   await page.keyboard.press('Escape')
   await page.getByRole('button', { name: /项目汇总/ }).click()
-  await page
-    .locator('label')
-    .filter({ has: page.getByRole('checkbox', { name, exact: true }) })
-    .click()
+  const labels = page.locator('.project-checks label')
+  for (const label of await labels.all()) {
+    const wanted = [name, partnerName].includes((await label.innerText()).trim())
+    if (await label.getByRole('checkbox').isChecked() !== wanted) await label.click()
+  }
   await expect(page.getByRole('checkbox', { name, exact: true })).toBeChecked()
   await page.getByRole('button', { name: '生成项目汇总', exact: true }).click()
   await expect(page.getByText('本次测算已保存。', { exact: false })).toBeVisible()
   const total = (await (await request.get('/api/v1/runs')).json()).find(
     (r: { kind: string }) => r.kind === 'portfolio',
   )
-  expect(total.members.length).toBeGreaterThanOrEqual(2)
+  expect(total.members.length).toBe(2)
   expect(total.members.every((m: { status: string }) => m.status === 'completed')).toBe(true)
   await page.getByRole('button', { name: /^未来12个月利润/ }).click()
   await expect(page.getByText('汇总成员与贡献')).toBeVisible()

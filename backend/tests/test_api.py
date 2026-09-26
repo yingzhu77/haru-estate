@@ -42,6 +42,15 @@ def test_real_api_project_run_evidence_and_portfolio(client: TestClient) -> None
     sources = client.get(f"/api/v1/runs/{run_id}/evidence?metric=twelve_month_profit").json()
     assert sources["sources"]
     assert all("2026-09" <= s["month"] <= "2027-08" for s in sources["sources"])
+    path = f"/api/v1/runs/{run_id}/evidence"
+    full = client.get(path).json()["sources"]
+    long_period = client.get(path, params={"month_from": "2026-01", "month_to": "2075-12"})
+    assert long_period.status_code == 200
+    assert long_period.json()["sources"] == full
+    period = client.get(path, params={"month_from": "2026-10", "month_to": "2026-12"})
+    expected = [row for row in full if "2026-10" <= row["month"] <= "2026-12"]
+    assert expected and len(expected) < len(full)
+    assert period.json()["sources"] == expected
     wrong = client.get("/api/v1/projects").json()[0]
     rejected = client.get(
         f"/api/v1/projects/{wrong['id']}/input", params={"revision_id": run["revision_ids"][0]}
@@ -53,6 +62,26 @@ def test_real_api_project_run_evidence_and_portfolio(client: TestClient) -> None
         ]
         == ["0.00"] * 12
     )
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"month_from": "2026-01"},
+        {"month_to": "2026-12"},
+        {"month_from": "2026-12", "month_to": "2026-01"},
+        {"month_from": "2026-01", "month_to": "2076-01"},
+        {"month_from": "2026-13", "month_to": "2027-01"},
+        {"month_from": "2026-01", "month_to": "2026-12", "month": "2026-01"},
+        {"month_from": "2026-01", "month_to": "2026-12", "months": "2026-01"},
+    ],
+)
+def test_evidence_rejects_invalid_or_ambiguous_ranges(
+    client: TestClient, params: dict[str, str]
+) -> None:
+    response = client.get("/api/v1/runs/missing/evidence", params=params)
+    assert response.status_code == 422
+    assert response.json()["code"] == "VALIDATION_ERROR"
 
 
 def test_validation_errors_have_contract_and_do_not_create_runs(client: TestClient) -> None:

@@ -3507,6 +3507,8 @@ export interface operations {
                 metric?: string;
                 month?: string | null;
                 months?: string[] | null;
+                month_from?: string | null;
+                month_to?: string | null;
             };
             header?: never;
             path: {
