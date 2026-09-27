@@ -33,7 +33,7 @@ const labels: Record<AgentTask['status'], string> = {
   queued: '已保存，等待处理',
   running: '正在理解问题',
   awaiting_reply: '需要你补充',
-  awaiting_confirmation: '草稿待你确认',
+  awaiting_confirmation: '方案待你确认',
   completed: '回答已保存',
   failed: '处理失败',
   interrupted: '服务中断，可继续',
@@ -54,7 +54,7 @@ async function load(token: number, runId?: string) {
     }
   } catch (cause) {
     if (generation === token && read === readSequence)
-      error.value = cause instanceof Error ? cause.message : '问数状态读取失败'
+      error.value = cause instanceof Error ? cause.message : '助手记录读取失败'
   }
 }
 watch(
@@ -155,20 +155,20 @@ watch(() => state.modelConfigurationVersion, refresh)
 <template>
   <section
     class="agent-chat"
-    aria-label="AI 问数"
+    aria-label="预测助手"
   >
-    <h3>问这次预测 / 变更草稿</h3>
+    <h3>预测助手</h3>
     <p class="note">
-      问数只读；变更先生成草稿，只有你点击确认才保存新版本。模型不计算金额、不批准变更。
+      查询已保存的预测，或提出计划调整。金额由程序计算，是否采用调整由你决定。
     </p>
     <p
       v-if="status && !status.configured"
       class="notice"
     >
-      DeepSeek 未配置。配置后可用；当前测算、来源和历史功能不受影响。
+      DeepSeek 未配置。请打开右上角“AI 设置”连接助手；仍可正常测算、查看历史和数据来源。
     </p>
     <p v-else-if="status">
-      {{ status.provider }} · {{ status.model }} · 每个任务最多 {{ status.max_calls }} 次模型调用
+      已连接 {{ status.provider }} · {{ status.model }}
     </p>
     <p
       v-if="run?.status !== 'completed'"
@@ -180,31 +180,49 @@ watch(() => state.modelConfigurationVersion, refresh)
       v-if="run"
       class="note"
     >
-      绑定 {{ run.project_names.join('、') }} · 运行 {{ run.id.slice(0, 8) }} ·
-      采用该次已保存的情景与时点
+      当前预测：{{ run.project_names.join('、') }} · 编号 {{ run.id.slice(0, 8) }} ·
+      查询范围以这份预测保存的项目、情景和期间为准
     </p>
     <form @submit.prevent="submit('create')">
-      <label for="agent-mode">操作方式</label>
+      <label for="agent-mode">你想做什么？</label>
       <select
         id="agent-mode"
         v-model="mode"
         :disabled="busy"
       >
         <option value="query">
-          只读问数
+          查看预测结果
         </option>
         <option
           value="change"
           :disabled="run?.kind !== 'project'"
         >
-          提出变更草稿
+          提出调整方案
         </option>
       </select>
+      <p
+        v-if="mode === 'query'"
+        class="note"
+      >
+        查询本次预测的利润、现金和数据来源，不修改项目数据。
+      </p>
+      <p
+        v-else
+        class="note"
+      >
+        先生成方案供你核对；确认采用后才保存新版本，再重新测算查看影响。原预测会保留。
+      </p>
+      <p
+        v-if="run?.kind === 'portfolio'"
+        class="note"
+      >
+        汇总预测支持查询结果；如需调整计划，请先切换到对应的单项目预测。
+      </p>
       <template v-if="mode === 'change'">
         <p>
-          仅支持一个分期的未售售价比例调整或交付延期。例如：一期未售售价降低5%。需绑定最新输入版本的预测。
+          说明想调整的分期和幅度，例如“1期住宅未售售价降低5%”或“2期住宅交付推迟3个月”。目前每次支持一项调整；请使用按最新数据生成的单项目预测。
         </p>
-        <label for="agent-known">这项变更何时获知</label>
+        <label for="agent-known">你从哪天知道这项调整？</label>
         <input
           id="agent-known"
           v-model="knownOn"
@@ -212,20 +230,20 @@ watch(() => state.modelConfigurationVersion, refresh)
           :disabled="busy"
         >
       </template>
-      <label for="agent-question">你的问题</label>
+      <label for="agent-question">{{ mode === 'query' ? '你想了解什么？' : '你想怎样调整计划？' }}</label>
       <textarea
         id="agent-question"
         v-model="question"
         rows="2"
         maxlength="2000"
-        placeholder="例如：未来12个月利润是多少？"
+        :placeholder="mode === 'query' ? '例如：未来12个月利润是多少？' : '例如：2期住宅交付推迟3个月'"
         :disabled="!enabled || busy"
       />
       <button
         type="submit"
         :disabled="!enabled || busy || !question.trim()"
       >
-        {{ mode === 'query' ? '提交问数' : '生成待确认草稿' }}
+        {{ mode === 'query' ? '查询结果' : '生成调整方案' }}
       </button>
     </form>
     <p
@@ -241,27 +259,27 @@ watch(() => state.modelConfigurationVersion, refresh)
     >
       重新读取状态
     </button>
-    <nav aria-label="问数历史分页">
+    <nav aria-label="助手记录翻页">
       <button
         type="button"
         :disabled="busy || offset === 0"
         @click="page(-20)"
       >
-        较新任务
+        较新记录
       </button>
       <button
         type="button"
         :disabled="busy || tasks.length < 20"
         @click="page(20)"
       >
-        更早任务
+        更早记录
       </button>
     </nav>
     <article
       v-for="task in tasks"
       :key="task.id"
     >
-      <b>{{ labels[task.status] }}</b>
+      <b>{{ task.draft?.revision_id ? '方案已采用' : labels[task.status] }}</b>
       <p>{{ task.question }}</p>
       <button
         v-if="task.id !== current?.id"
@@ -269,13 +287,13 @@ watch(() => state.modelConfigurationVersion, refresh)
         :disabled="busy"
         @click="selectedId = task.id"
       >
-        选择此任务
+        继续这条记录
       </button>
       <p
         v-for="(message, index) in task.dialogue"
         :key="index"
       >
-        {{ message.role === 'assistant' ? '追问' : '你的补充' }}：{{ message.content }}
+        {{ message.role === 'assistant' ? '助手想确认' : '你的补充' }}：{{ message.content }}
       </p>
       <p
         v-if="task.error"
@@ -299,7 +317,7 @@ watch(() => state.modelConfigurationVersion, refresh)
           type="submit"
           :disabled="busy || !reply.trim()"
         >
-          补充后继续
+          提交补充说明
         </button>
       </form>
       <template v-if="task.answer">
@@ -316,7 +334,7 @@ watch(() => state.modelConfigurationVersion, refresh)
           type="button"
           @click="evidence(task)"
         >
-          查看绑定运行来源
+          查看这笔金额的来源
         </button>
         <p class="note">
           来源已按回答期间筛选；余额和缺口保留截至对应月份的累计记录。
@@ -324,20 +342,20 @@ watch(() => state.modelConfigurationVersion, refresh)
       </template>
       <section
         v-if="task.draft"
-        aria-label="变更草稿"
+        aria-label="待核对的调整方案"
       >
         <p>
-          {{ task.draft.project_name }} · {{ task.draft.phase_name }} · 基础版本 v{{
+          {{ task.draft.project_name }} · {{ task.draft.phase_name }} · 调整前数据版本 v{{
             task.draft.base_version
           }}
         </p>
-        <p>草稿 {{ task.draft.id.slice(0, 8) }} · 获知日期 {{ task.draft.known_on }}</p>
+        <p>方案编号 {{ task.draft.id.slice(0, 8) }} · 信息获知日期 {{ task.draft.known_on }}</p>
         <p>
           {{
             task.draft.change.field === 'price_change' ? '未售售价（元/平方米）' : '交付月份'
           }}：{{ task.draft.before }} → {{ task.draft.after }}
         </p>
-        <p>这是基础参数预览，未叠加情景或工作台临时调整；不是利润测算。</p>
+        <p>这里展示调整前后的参数，尚未计算利润和现金的变化，也未叠加工作台的情景调整。</p>
         <p
           v-for="warning in task.draft.preview.warnings"
           :key="warning"
@@ -345,7 +363,7 @@ watch(() => state.modelConfigurationVersion, refresh)
           {{ warning }}
         </p>
         <p v-if="task.draft.revision_id">
-          已保存新输入版本。请到工作台选择不早于获知日期的信息截止及预测基准，再生成新预测；原预测未改变。
+          已保存新数据版本，原预测保持不变。请到预测工作台，将信息截止日和预测基准日设为不早于上述信息获知日期，再生成预测查看调整效果。
         </p>
         <button
           v-else-if="task.id === current?.id && task.status === 'awaiting_confirmation'"
@@ -353,7 +371,7 @@ watch(() => state.modelConfigurationVersion, refresh)
           :disabled="busy"
           @click="submit('confirm')"
         >
-          确认此草稿并保存新版本
+          确认采用，保存新版本
         </button>
       </section>
       <button
@@ -362,7 +380,7 @@ watch(() => state.modelConfigurationVersion, refresh)
         :disabled="busy || !status?.configured || (task.attempt ?? 1) >= 3"
         @click="submit('resume')"
       >
-        继续原任务
+        重试这条记录
       </button>
       <details v-if="task.steps?.length">
         <summary>处理记录 · {{ task.calls }} 次模型调用</summary>
@@ -378,7 +396,7 @@ watch(() => state.modelConfigurationVersion, refresh)
       v-if="tasks.length"
       class="note"
     >
-      任务已保存，关闭页面后可在同一预测继续查看。
+      记录已保存，关闭页面后可在同一预测继续查看。
     </p>
   </section>
 </template>

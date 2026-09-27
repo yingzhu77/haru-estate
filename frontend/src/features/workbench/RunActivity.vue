@@ -40,8 +40,8 @@ const timeLabel = (value: string) => {
       >
         <el-icon><Connection /></el-icon>
       </div>
-      <h2>Agent 协作</h2>
-      <span class="ai-state">程序测算 · AI 问数</span>
+      <h2>测算进度与助手</h2>
+      <span class="ai-state">程序测算 · AI 辅助</span>
     </div>
     <div
       class="flow-strip"
@@ -182,7 +182,7 @@ const timeLabel = (value: string) => {
     <div class="activity-card explainer">
       <b>每一个数字，都有来处</b>
       <p>销售、回款与收入确认分开计算；开发投入、成本结转和实际付款分别追踪。</p>
-      <p>程序提供测算和运行记录；AI 问数需要配置 DeepSeek，回答绑定已保存的预测。</p>
+      <p>连接 DeepSeek 后，可用日常语言查询这份预测或提出调整方案。采用方案前由你确认，原预测始终保留。</p>
     </div>
     <div class="activity-footer">
       <span class="live-indicator" />程序计算 · 来源可查<RouterLink to="/runs">

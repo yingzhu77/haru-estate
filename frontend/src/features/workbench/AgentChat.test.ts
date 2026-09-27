@@ -73,7 +73,7 @@ it('selects an older pending task and retains its full clarification history', a
   await flushPromises()
   await wrapper
     .findAll('button')
-    .find((button) => button.text() === '选择此任务')!
+    .find((button) => button.text() === '继续这条记录')!
     .trigger('click')
   expect(wrapper.text()).toContain('你的补充：当前范围')
   await wrapper.get('#agent-reply').setValue('未来12个月')
@@ -124,7 +124,7 @@ it('binds confirmation to the displayed draft and preserves conflicts for review
   expect(api.confirmAgent).not.toHaveBeenCalled()
   await wrapper
     .findAll('button')
-    .find((button) => button.text() === '确认此草稿并保存新版本')!
+    .find((button) => button.text() === '确认采用，保存新版本')!
     .trigger('click')
   await flushPromises()
   expect(api.confirmAgent).toHaveBeenCalledExactlyOnceWith('task', {

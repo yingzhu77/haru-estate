@@ -2,8 +2,8 @@ import { expect, test } from '@playwright/test'
 
 test('model settings use real guarded status and synthetic connection responses in both themes', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: '模型配置', exact: true }).click()
-  const dialog = page.getByRole('dialog', { name: '模型配置' })
+  await page.getByRole('button', { name: 'AI 设置', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'AI 设置' })
   await expect(dialog.getByLabel('API Key')).toBeEnabled()
   await expect(dialog).not.toContainText('配置状态读取失败')
   await expect(dialog.getByLabel('API Key')).toHaveAttribute('type', 'password')
@@ -11,7 +11,7 @@ test('model settings use real guarded status and synthetic connection responses 
   await dialog.getByLabel('API Key').fill('synthetic-browser-credential')
   await dialog.getByRole('button', { name: '关闭', exact: true }).click()
   await page.getByRole('button', { name: '简约', exact: true }).click()
-  await page.getByRole('button', { name: '模型配置', exact: true }).click()
+  await page.getByRole('button', { name: 'AI 设置', exact: true }).click()
   await expect(dialog.getByLabel('API Key')).toHaveValue('')
   await page.screenshot({ path: '../artifacts/model-settings/settings-minimal.png', animations: 'disabled' })
   await page.route('**/api/v1/model-config', async route => {

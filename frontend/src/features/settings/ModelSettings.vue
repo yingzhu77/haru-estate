@@ -102,11 +102,11 @@ async function clear() {
     :disabled="busy"
     @click="open = true"
   >
-    <el-icon><Setting /></el-icon><span>模型配置</span>
+    <el-icon><Setting /></el-icon><span>AI 设置</span>
   </button>
   <el-dialog
     v-model="open"
-    title="模型配置"
+    title="AI 设置"
     width="min(520px, 92vw)"
     class="model-settings-dialog"
     destroy-on-close
@@ -116,7 +116,7 @@ async function clear() {
       <div class="provider-card">
         <div>
           <strong>DeepSeek</strong>
-          <p>为问数与变更草稿连接模型</p>
+          <p>连接后可查询预测结果、提出调整方案</p>
         </div>
         <el-tag :type="configuration?.configured ? 'success' : 'info'">
           {{ loading ? '读取中' : configuration?.configured ? '已配置' : '未配置' }}
@@ -176,7 +176,7 @@ async function clear() {
         {{ message }}
       </p>
       <p class="field-help">
-        请求仅由后端发往 DeepSeek 官方接口。请勿在问数聊天中粘贴密钥。
+        请求仅由后端发往 DeepSeek 官方接口。请勿在助手对话中粘贴密钥。
       </p>
     </div>
     <template #footer>
