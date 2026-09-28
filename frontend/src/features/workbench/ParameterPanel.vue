@@ -53,7 +53,7 @@ const phases = computed(() => props.revision?.data.phases ?? [])
 
 <template>
   <aside
-    class="panel parameter-panel"
+    class="panel parameter-panel workbench-sidebar"
     aria-label="预测参数与情景"
   >
     <div class="panel-heading">
@@ -63,176 +63,183 @@ const phases = computed(() => props.revision?.data.phases ?? [])
       </el-icon>
     </div>
     <div
-      class="scenario-control"
-      role="group"
-      aria-label="预测情景"
+      class="sidebar-scroll"
+      tabindex="0"
+      role="region"
+      aria-label="参数与情景内容，可滚动"
     >
-      <button
-        v-for="(label, key) in scenarioLabels"
-        :key="key"
-        :class="{ active: scenario === key }"
-        :aria-pressed="scenario === key"
-        @click="emit('update:scenario', key)"
+      <div
+        class="scenario-control"
+        role="group"
+        aria-label="预测情景"
       >
-        {{ label }}
-      </button>
-    </div>
-    <ScenarioPreview
-      :scenario="scenario"
-      :revision-id="revision?.id"
-    />
-    <template v-if="state.mode === 'project'">
-      <div class="input-caption">
-        <span>当前输入 <b v-if="revision">v{{ revision.version }}</b></span>
-        <span v-if="revision">已结账至 {{ revision.data.actual_closed_through }}</span>
+        <button
+          v-for="(label, key) in scenarioLabels"
+          :key="key"
+          :class="{ active: scenario === key }"
+          :aria-pressed="scenario === key"
+          @click="emit('update:scenario', key)"
+        >
+          {{ label }}
+        </button>
       </div>
-      <el-skeleton
-        v-if="loading"
-        :rows="5"
-        animated
+      <ScenarioPreview
+        :scenario="scenario"
+        :revision-id="revision?.id"
       />
-      <template v-else-if="revision">
-        <div
-          v-if="!phases.length"
-          class="empty-input"
-        >
-          尚无分期计划。请先在数据管理中补充项目输入。
+      <template v-if="state.mode === 'project'">
+        <div class="input-caption">
+          <span>当前输入 <b v-if="revision">v{{ revision.version }}</b></span>
+          <span v-if="revision">已结账至 {{ revision.data.actual_closed_through }}</span>
         </div>
-        <div
-          v-for="phase in phases"
-          :key="phase.id"
-          class="phase-summary"
-        >
-          <div class="phase-label">
-            <span>{{ phase.name }}</span><el-icon><Calendar /></el-icon>
-          </div>
-          <dl>
-            <div>
-              <dt>计划售价</dt>
-              <dd>
-                {{ Number(phase.price).toLocaleString('zh-CN') }}
-                <small>元/㎡</small>
-              </dd>
-            </div>
-            <div>
-              <dt>交付月份</dt>
-              <dd>{{ phase.delivery_month }}</dd>
-            </div>
-          </dl>
-        </div>
-        <div class="section-heading">
-          <h3>未来计划调整</h3>
-          <button
-            class="icon-reset"
-            aria-label="重置当前项目情景调整"
-            title="重置情景调整"
-            @click="reset"
+        <el-skeleton
+          v-if="loading"
+          :rows="5"
+          animated
+        />
+        <template v-else-if="revision">
+          <div
+            v-if="!phases.length"
+            class="empty-input"
           >
-            <el-icon><RefreshLeft /></el-icon>
-          </button>
-        </div>
-        <div class="parameter-field">
-          <label for="price-change">未售价格变化 <b>{{ pricePercent > 0 ? '+' : '' }}{{ pricePercent }}%</b></label>
-          <el-slider
-            id="price-change"
-            v-model="pricePercent"
-            :min="-30"
-            :max="30"
-            :step="1"
-            aria-label="未售价格变化百分比"
-          />
-        </div>
-        <div class="parameter-field">
-          <label for="cost-change">剩余成本变化 <b>{{ costPercent > 0 ? '+' : '' }}{{ costPercent }}%</b></label>
-          <el-slider
-            id="cost-change"
-            v-model="costPercent"
-            :min="-30"
-            :max="30"
-            :step="1"
-            aria-label="剩余成本变化百分比"
-          />
-        </div>
-        <div class="delay-row">
-          <label for="collection-delay">回款额外滞后</label><el-input-number
-            id="collection-delay"
-            v-model="collectionDelay"
-            :min="0"
-            :max="24"
-            :precision="0"
-            controls-position="right"
-            aria-label="回款额外滞后月数"
-          /><span>月</span>
-        </div>
-        <div
-          v-for="phase in phases"
-          :key="phase.id"
-          class="delay-row"
-        >
-          <label :for="`delivery-${phase.id}`">{{ phase.name }}延期</label>
-          <el-input-number
-            :id="`delivery-${phase.id}`"
-            :model-value="overrides.delivery_delays?.[phase.id] ?? 0"
-            :min="0"
-            :max="36"
-            :precision="0"
-            controls-position="right"
-            :aria-label="`${phase.name}交付延期月数`"
-            @update:model-value="updateDelivery(phase.id, $event)"
-          /><span>月</span>
+            尚无分期计划。请先在数据管理中补充项目输入。
+          </div>
+          <div
+            v-for="phase in phases"
+            :key="phase.id"
+            class="phase-summary"
+          >
+            <div class="phase-label">
+              <span>{{ phase.name }}</span><el-icon><Calendar /></el-icon>
+            </div>
+            <dl>
+              <div>
+                <dt>计划售价</dt>
+                <dd>
+                  {{ Number(phase.price).toLocaleString('zh-CN') }}
+                  <small>元/㎡</small>
+                </dd>
+              </div>
+              <div>
+                <dt>交付月份</dt>
+                <dd>{{ phase.delivery_month }}</dd>
+              </div>
+            </dl>
+          </div>
+          <div class="section-heading">
+            <h3>未来计划调整</h3>
+            <button
+              class="icon-reset"
+              aria-label="重置当前项目情景调整"
+              title="重置情景调整"
+              @click="reset"
+            >
+              <el-icon><RefreshLeft /></el-icon>
+            </button>
+          </div>
+          <div class="parameter-field">
+            <label for="price-change">未售价格变化 <b>{{ pricePercent > 0 ? '+' : '' }}{{ pricePercent }}%</b></label>
+            <el-slider
+              id="price-change"
+              v-model="pricePercent"
+              :min="-30"
+              :max="30"
+              :step="1"
+              aria-label="未售价格变化百分比"
+            />
+          </div>
+          <div class="parameter-field">
+            <label for="cost-change">剩余成本变化 <b>{{ costPercent > 0 ? '+' : '' }}{{ costPercent }}%</b></label>
+            <el-slider
+              id="cost-change"
+              v-model="costPercent"
+              :min="-30"
+              :max="30"
+              :step="1"
+              aria-label="剩余成本变化百分比"
+            />
+          </div>
+          <div class="delay-row">
+            <label for="collection-delay">回款额外滞后</label><el-input-number
+              id="collection-delay"
+              v-model="collectionDelay"
+              :min="0"
+              :max="24"
+              :precision="0"
+              controls-position="right"
+              aria-label="回款额外滞后月数"
+            /><span>月</span>
+          </div>
+          <div
+            v-for="phase in phases"
+            :key="phase.id"
+            class="delay-row"
+          >
+            <label :for="`delivery-${phase.id}`">{{ phase.name }}延期</label>
+            <el-input-number
+              :id="`delivery-${phase.id}`"
+              :model-value="overrides.delivery_delays?.[phase.id] ?? 0"
+              :min="0"
+              :max="36"
+              :precision="0"
+              controls-position="right"
+              :aria-label="`${phase.name}交付延期月数`"
+              @update:model-value="updateDelivery(phase.id, $event)"
+            /><span>月</span>
+          </div>
+          <p class="field-note">
+            仅调整未来计划，已签合同与历史实际保持原值。其他输入可在数据管理中修订。
+          </p>
+        </template>
+      </template>
+      <template v-else>
+        <div class="portfolio-note">
+          <span class="scope-count">{{ selectedCount }}</span><span>个项目纳入本次汇总</span>
         </div>
         <p class="field-note">
-          仅调整未来计划，已签合同与历史实际保持原值。其他输入可在数据管理中修订。
+          采用共同预测时点和同一情景，绑定本次各项目的输入快照。
+        </p>
+        <el-checkbox-group
+          v-model="state.selectedProjectIds"
+          class="project-checks"
+        >
+          <el-checkbox
+            v-for="project in state.projects.filter((item) => !item.archived)"
+            :key="project.id"
+            :value="project.id"
+          >
+            {{ project.name }}
+          </el-checkbox>
+        </el-checkbox-group>
+        <div class="boundary-note">
+          <b>独立核算，按月汇总</b>
+          <p>项目现金不默认互相调拨。资金缺口保留各项目风险，不能用另一项目盈余自动抵销。</p>
+        </div>
+        <p class="field-note">
+          需要调整售价或成本时，切至对应单项目编辑；本次汇总使用各项目现有情景草稿。
         </p>
       </template>
-    </template>
-    <template v-else>
-      <div class="portfolio-note">
-        <span class="scope-count">{{ selectedCount }}</span><span>个项目纳入本次汇总</span>
-      </div>
-      <p class="field-note">
-        采用共同预测时点和同一情景，绑定本次各项目的输入快照。
-      </p>
-      <el-checkbox-group
-        v-model="state.selectedProjectIds"
-        class="project-checks"
-      >
-        <el-checkbox
-          v-for="project in state.projects.filter((item) => !item.archived)"
-          :key="project.id"
-          :value="project.id"
+      <div class="panel-footer">
+        <el-button
+          type="primary"
+          :icon="DataAnalysis"
+          :loading="busy"
+          :disabled="disabled || loading"
+          class="generate-button"
+          @click="emit('generate')"
         >
-          {{ project.name }}
-        </el-checkbox>
-      </el-checkbox-group>
-      <div class="boundary-note">
-        <b>独立核算，按月汇总</b>
-        <p>项目现金不默认互相调拨。资金缺口保留各项目风险，不能用另一项目盈余自动抵销。</p>
+          {{ state.mode === 'portfolio' ? '生成项目汇总' : '生成情景预测' }}
+        </el-button>
+        <RouterLink
+          to="/data"
+          class="secondary-action"
+        >
+          <el-icon><Setting /></el-icon>管理数据与假设
+        </RouterLink>
+        <p class="draft-caption">
+          情景草稿提交后随预测运行保存
+        </p>
       </div>
-      <p class="field-note">
-        需要调整售价或成本时，切至对应单项目编辑；本次汇总使用各项目现有情景草稿。
-      </p>
-    </template>
-    <div class="panel-footer">
-      <el-button
-        type="primary"
-        :icon="DataAnalysis"
-        :loading="busy"
-        :disabled="disabled || loading"
-        class="generate-button"
-        @click="emit('generate')"
-      >
-        {{ state.mode === 'portfolio' ? '生成项目汇总' : '生成情景预测' }}
-      </el-button>
-      <RouterLink
-        to="/data"
-        class="secondary-action"
-      >
-        <el-icon><Setting /></el-icon>管理数据与假设
-      </RouterLink>
-      <p class="draft-caption">
-        情景草稿提交后随预测运行保存
-      </p>
     </div>
   </aside>
 </template>

@@ -8,6 +8,7 @@ const props = defineProps<{ run: Run | null }>()
 const emit = defineEmits<{ confirmed: [] }>()
 const status = ref<AgentStatus | null>(null)
 const tasks = ref<AgentTask[]>([])
+const savedVersions = ref<Record<string, number>>({})
 const selectedId = ref('')
 const offset = ref(0)
 const question = ref('')
@@ -48,6 +49,16 @@ async function load(token: number, runId?: string) {
     if (generation !== token || read !== readSequence) return
     status.value = configuration
     tasks.value = saved
+    const revisions = await Promise.allSettled(saved.flatMap((task) => {
+      const draft = task.draft
+      return draft?.revision_id && savedVersions.value[draft.revision_id] === undefined
+        ? [api.input(draft.project_id, draft.revision_id)] : []
+    }))
+    if (generation !== token || read !== readSequence) return
+    for (const revision of revisions) {
+      if (revision.status === 'fulfilled')
+        savedVersions.value[revision.value.id] = revision.value.version
+    }
     if (!selectedId.value && saved[0]) selectedId.value = saved[0].id
     if (saved.some((task) => ['queued', 'running'].includes(task.status))) {
       timer = setTimeout(() => void load(token, runId), 1200)
@@ -63,6 +74,7 @@ watch(
     ++generation
     clearTimeout(timer)
     tasks.value = []
+    savedVersions.value = {}
     selectedId.value = ''
     offset.value = 0
     mode.value = 'query'
@@ -182,6 +194,18 @@ watch(() => state.modelConfigurationVersion, refresh)
     >
       当前预测：{{ run.project_names.join('、') }} · 编号 {{ run.id.slice(0, 8) }} ·
       查询范围以这份预测保存的项目、情景和期间为准
+    </p>
+    <p
+      v-if="run"
+      class="note"
+    >
+      对话随这份预测保存。切换或生成新预测后，旧对话仍在原预测中。
+      <RouterLink :to="`/runs/${run.id}`">
+        打开本次预测与对话
+      </RouterLink>
+      · <RouterLink to="/runs">
+        查找其他预测的对话
+      </RouterLink>
     </p>
     <form @submit.prevent="submit('create')">
       <label for="agent-mode">你想做什么？</label>
@@ -362,9 +386,19 @@ watch(() => state.modelConfigurationVersion, refresh)
         >
           {{ warning }}
         </p>
-        <p v-if="task.draft.revision_id">
-          已保存新数据版本，原预测保持不变。请到预测工作台，将信息截止日和预测基准日设为不早于上述信息获知日期，再生成预测查看调整效果。
-        </p>
+        <template v-if="task.draft.revision_id">
+          <p>
+            <strong v-if="savedVersions[task.draft.revision_id] !== undefined">已保存为数据版本 v{{ savedVersions[task.draft.revision_id] }}</strong>
+            <strong v-else>新数据版本已保存</strong>
+            （版本编号 {{ task.draft.revision_id.slice(0, 8) }}）。上方 v{{ task.draft.base_version }} 是调整前版本。
+          </p>
+          <p>保存数据不会自动生成新预测，原预测保持不变。</p>
+          <p>
+            <RouterLink to="/">
+              前往预测工作台
+            </RouterLink>，选择“{{ task.draft.project_name }}”，将信息截止日和预测基准日设为不早于 {{ task.draft.known_on }}，再生成预测查看调整效果。
+          </p>
+        </template>
         <button
           v-else-if="task.id === current?.id && task.status === 'awaiting_confirmation'"
           type="button"

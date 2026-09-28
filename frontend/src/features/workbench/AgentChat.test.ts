@@ -1,5 +1,5 @@
 import { beforeEach, expect, it, vi } from 'vitest'
-import { flushPromises, mount } from '@vue/test-utils'
+import { config, flushPromises, mount, RouterLinkStub } from '@vue/test-utils'
 import { api } from '../../api/client'
 import type { AgentTask, Run } from '../../api/types'
 import AgentChat from './AgentChat.vue'
@@ -13,6 +13,7 @@ vi.mock('../../api/client', () => ({
     replyAgent: vi.fn(),
     resumeAgent: vi.fn(),
     confirmAgent: vi.fn(),
+    input: vi.fn(),
   },
 }))
 const run: Run = {
@@ -46,6 +47,7 @@ const task: AgentTask = {
   steps: [],
 }
 beforeEach(() => {
+  config.global.stubs = { ...config.global.stubs, RouterLink: RouterLinkStub }
   vi.resetAllMocks()
   vi.mocked(api.agentStatus).mockResolvedValue({
     max_calls: 3,
@@ -138,6 +140,18 @@ it('binds confirmation to the displayed draft and preserves conflicts for review
   expect(wrapper.text()).toContain('数据已被修订')
   expect(wrapper.text()).toContain('10000 → 9500')
   wrapper.unmount()
+
+  vi.mocked(api.agentTasks).mockResolvedValue([
+    { ...task, mode: 'change', status: 'completed', draft: { ...draft, revision_id: 'saved-revision' } },
+  ])
+  vi.mocked(api.input).mockResolvedValue({ id: 'saved-revision', version: 2 } as Awaited<ReturnType<typeof api.input>>)
+  const saved = mount(AgentChat, { props: { run } })
+  await flushPromises()
+  expect(api.input).toHaveBeenCalledWith('p', 'saved-revision')
+  expect(saved.text()).toContain('已保存为数据版本 v2')
+  expect(saved.text()).toContain('上方 v1 是调整前版本')
+  expect(saved.findAll('button').some(button => button.text() === '确认采用，保存新版本')).toBe(false)
+  saved.unmount()
 })
 it('shows unconfigured state without fabricating an answer or calling a model', async () => {
   vi.mocked(api.agentStatus).mockResolvedValue({

@@ -4,16 +4,49 @@ import threading
 from pathlib import Path
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from app import application
-from app.agent_model import DeepSeekModel
+from app.agent_model import DeepSeekModel, ModelFailure
 from app.application import Service
 from app.main import app
 from app.schemas import AgentPlan, ModelConfiguration
 
 SENTINEL = "configuration-test-secret-do-not-persist"
 HEADERS = {"X-Haru-Config": "1", "Origin": "http://127.0.0.1:18080"}
+
+
+@pytest.mark.parametrize(
+    ("code", "expected"),
+    [("timeout", "超时"), ("schema", "格式不符合"), ("rate_limit", "限流"), (SENTINEL, "未能完成")],
+)
+def test_configuration_keeps_safe_cause_and_old_connection(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    code: str,
+    expected: str,
+) -> None:
+    service = Service(tmp_path)
+    service.start(worker=False)
+    original = service.agent.model
+
+    def failure(self: DeepSeekModel, *args: object) -> AgentPlan:
+        raise ModelFailure(SENTINEL, code=code)
+
+    monkeypatch.setattr(DeepSeekModel, "plan", failure)
+    try:
+        with pytest.raises(HTTPException) as exc:
+            service.agent.configure(ModelConfiguration(api_key=SENTINEL, model="test-model"))
+        assert exc.value.status_code == 502
+        assert expected in exc.value.detail and "耗时" in exc.value.detail
+        assert SENTINEL not in exc.value.detail and SENTINEL not in caplog.text
+        assert "elapsed_seconds=" in caplog.text
+        assert service.agent.model is original
+        assert not service.agent.configuring
+    finally:
+        service.stop()
 
 
 def test_configuration_test_clear_restart_and_secret_not_persisted(

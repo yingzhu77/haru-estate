@@ -23,7 +23,7 @@ const timeLabel = (value: string) => {
 
 <template>
   <aside
-    class="panel activity-panel"
+    class="panel activity-panel workbench-sidebar"
     aria-label="运行记录与协作"
   >
     <div class="activity-heading">
@@ -44,150 +44,160 @@ const timeLabel = (value: string) => {
       <span class="ai-state">程序测算 · AI 辅助</span>
     </div>
     <div
-      class="flow-strip"
-      aria-label="数据检查、程序计算、来源核对"
-    >
-      <div>
-        <el-icon :class="{ done: run?.status === 'completed' }">
-          <DocumentChecked />
-        </el-icon><span>数据检查</span>
-      </div>
-      <span class="flow-line" />
-      <div>
-        <el-icon :class="{ done: run?.status === 'completed' }">
-          <Connection />
-        </el-icon><span>程序测算</span>
-      </div>
-      <span class="flow-line" />
-      <div>
-        <el-icon><CircleCheckFilled /></el-icon><span>来源核对</span>
-      </div>
-    </div>
-    <div
-      v-if="pollError"
-      class="activity-card warning-card"
-      role="alert"
-    >
-      <b>状态暂未更新</b>
-      <p>{{ pollError }}</p>
-      <el-button
-        size="small"
-        @click="emit('refresh')"
-      >
-        重新获取状态
-      </el-button>
-    </div>
-    <div
-      v-if="run"
-      class="activity-card run-card"
-    >
-      <div class="card-heading">
-        <el-icon>
-          <CircleCheckFilled v-if="run.status === 'completed'" /><WarningFilled
-            v-else-if="['failed', 'incomplete', 'interrupted'].includes(run.status)"
-          /><Clock v-else />
-        </el-icon><b>{{ statusLabels[run.status] ?? run.status }}</b><time>{{ timeLabel(run.created_at) }}</time>
-      </div>
-      <p v-if="run.status === 'completed'">
-        本次测算已保存。指标、明细与来源绑定同一份输入快照。
-      </p>
-      <p v-else-if="run.status === 'interrupted'">
-        服务中断前的输入已保存。继续运行将使用原快照。
-      </p>
-      <p
-        v-else-if="run.error"
-        class="run-error"
-      >
-        {{ run.error }}
-      </p>
-      <p v-else>
-        任务已保存，关闭此页面不会取消测算。
-      </p>
-      <span class="run-id">运行 {{ run.id.slice(0, 12) }} · 第 {{ run.attempt }} 次尝试</span>
-      <el-button
-        v-if="run.status === 'interrupted'"
-        type="primary"
-        size="small"
-        :loading="busy"
-        @click="emit('resume')"
-      >
-        继续原运行
-      </el-button>
-      <button
-        v-if="run.result && run.status === 'completed'"
-        class="text-action"
-        @click="showEvidence(run.id)"
-      >
-        查看计算依据 <el-icon><ArrowRight /></el-icon>
-      </button>
-      <RouterLink
-        :to="`/runs/${run.id}`"
-        class="text-action"
-      >
-        完整运行记录 <el-icon><ArrowRight /></el-icon>
-      </RouterLink>
-    </div>
-    <div
-      v-else
-      class="activity-card ready-card"
-    >
-      <div class="card-heading">
-        <el-icon><Clock /></el-icon><b>等待首次预测</b>
-      </div>
-      <p>选择项目与预测时点，检查左侧参数后生成预测。计算过程和来源将在这里保留。</p>
-    </div>
-    <div
-      v-if="run?.steps?.length"
-      class="step-list"
-      aria-label="真实执行步骤"
+      class="sidebar-scroll"
+      tabindex="0"
+      role="region"
+      aria-label="测算进度与助手内容，可滚动"
     >
       <div
-        v-for="step in run.steps"
-        :key="`${step.attempt}-${step.sequence}`"
-        class="step-item"
+        class="flow-strip"
+        aria-label="数据检查、程序计算、来源核对"
       >
-        <span
-          class="step-dot"
-          :class="{ 'step-failed': step.status === 'failed' }"
-        />
         <div>
-          <div class="step-heading">
-            <b>{{ step.name }}</b><time>{{ timeLabel(step.created_at) }}</time>
-          </div>
-          <p>{{ step.message }}</p>
-          <span class="step-meta">{{ statusLabels[step.status] ?? step.status }} · 尝试 {{ step.attempt }}</span>
+          <el-icon :class="{ done: run?.status === 'completed' }">
+            <DocumentChecked />
+          </el-icon><span>数据检查</span>
+        </div>
+        <span class="flow-line" />
+        <div>
+          <el-icon :class="{ done: run?.status === 'completed' }">
+            <Connection />
+          </el-icon><span>程序测算</span>
+        </div>
+        <span class="flow-line" />
+        <div>
+          <el-icon><CircleCheckFilled /></el-icon><span>来源核对</span>
         </div>
       </div>
-    </div>
-    <div
-      v-if="run?.result?.warnings.length"
-      class="activity-card warning-card"
-    >
-      <div class="card-heading">
-        <el-icon><WarningFilled /></el-icon><b>需关注事项</b>
-      </div>
-      <ul>
-        <li
-          v-for="warning in run.result.warnings"
-          :key="warning"
+      <div
+        v-if="pollError"
+        class="activity-card warning-card"
+        role="alert"
+      >
+        <b>状态暂未更新</b>
+        <p>{{ pollError }}</p>
+        <el-button
+          size="small"
+          @click="emit('refresh')"
         >
-          {{ warning }}
-        </li>
-      </ul>
-    </div>
-    <AgentChat
-      :run="run"
-      @confirmed="emit('confirmed')"
-    />
-    <div class="activity-card explainer">
-      <b>每一个数字，都有来处</b>
-      <p>销售、回款与收入确认分开计算；开发投入、成本结转和实际付款分别追踪。</p>
-      <p>连接 DeepSeek 后，可用日常语言查询这份预测或提出调整方案。采用方案前由你确认，原预测始终保留。</p>
-    </div>
-    <div class="activity-footer">
-      <span class="live-indicator" />程序计算 · 来源可查<RouterLink to="/runs">
-        历史版本
-      </RouterLink>
+          重新获取状态
+        </el-button>
+      </div>
+      <div
+        v-if="run"
+        class="activity-card run-card"
+      >
+        <div class="card-heading">
+          <el-icon>
+            <CircleCheckFilled v-if="run.status === 'completed'" /><WarningFilled
+              v-else-if="['failed', 'incomplete', 'interrupted'].includes(run.status)"
+            /><Clock v-else />
+          </el-icon><b>{{ statusLabels[run.status] ?? run.status }}</b><time>{{ timeLabel(run.created_at) }}</time>
+        </div>
+        <p v-if="run.status === 'completed'">
+          本次测算已保存。指标、明细与来源绑定同一份输入快照。
+        </p>
+        <p v-else-if="run.status === 'interrupted'">
+          服务中断前的输入已保存。继续运行将使用原快照。
+        </p>
+        <p
+          v-else-if="run.error"
+          class="run-error"
+        >
+          {{ run.error }}
+        </p>
+        <p v-else>
+          任务已保存，关闭此页面不会取消测算。
+        </p>
+        <span class="run-id">运行 {{ run.id.slice(0, 12) }} · 第 {{ run.attempt }} 次尝试</span>
+        <el-button
+          v-if="run.status === 'interrupted'"
+          type="primary"
+          size="small"
+          :loading="busy"
+          @click="emit('resume')"
+        >
+          继续原运行
+        </el-button>
+        <button
+          v-if="run.result && run.status === 'completed'"
+          class="text-action"
+          @click="showEvidence(run.id)"
+        >
+          查看计算依据 <el-icon><ArrowRight /></el-icon>
+        </button>
+        <RouterLink
+          :to="`/runs/${run.id}`"
+          class="text-action"
+        >
+          完整运行记录 <el-icon><ArrowRight /></el-icon>
+        </RouterLink>
+      </div>
+      <div
+        v-else
+        class="activity-card ready-card"
+      >
+        <div class="card-heading">
+          <el-icon><Clock /></el-icon><b>等待首次预测</b>
+        </div>
+        <p>选择项目与预测时点，检查左侧参数后生成预测。计算过程和来源将在这里保留。</p>
+      </div>
+      <div
+        v-if="run?.steps?.length"
+        class="step-list"
+        aria-label="真实执行步骤"
+      >
+        <div
+          v-for="step in run.steps"
+          :key="`${step.attempt}-${step.sequence}`"
+          class="step-item"
+        >
+          <span
+            class="step-dot"
+            :class="{ 'step-failed': step.status === 'failed' }"
+          />
+          <div>
+            <div class="step-heading">
+              <b>{{ step.name }}</b><time>{{ timeLabel(step.created_at) }}</time>
+            </div>
+            <p>{{ step.message }}</p>
+            <span class="step-meta">{{ statusLabels[step.status] ?? step.status }} · 尝试 {{ step.attempt }}</span>
+          </div>
+        </div>
+      </div>
+      <div
+        v-if="run?.result?.warnings.length"
+        class="activity-card warning-card"
+      >
+        <div class="card-heading">
+          <el-icon><WarningFilled /></el-icon><b>需关注事项</b>
+        </div>
+        <ul>
+          <li
+            v-for="warning in run.result.warnings"
+            :key="warning"
+          >
+            {{ warning }}
+          </li>
+        </ul>
+      </div>
+      <AgentChat
+        :run="run"
+        @confirmed="emit('confirmed')"
+      />
+      <div class="activity-card explainer">
+        <b>每一个数字，都有来处</b>
+        <p>销售、回款与收入确认分开计算；开发投入、成本结转和实际付款分别追踪。</p>
+        <p>
+          连接 DeepSeek
+          后，可用日常语言查询这份预测或提出调整方案。采用方案前由你确认，原预测始终保留。
+        </p>
+      </div>
+      <div class="activity-footer">
+        <span class="live-indicator" />程序计算 · 来源可查<RouterLink to="/runs">
+          历史版本
+        </RouterLink>
+      </div>
     </div>
   </aside>
 </template>
@@ -341,8 +351,6 @@ time {
 }
 .step-list {
   padding: 1px 4px 0;
-  max-height: 235px;
-  overflow-y: auto;
 }
 .step-item {
   display: flex;

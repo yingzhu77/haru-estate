@@ -245,6 +245,45 @@ main {
     display: none;
   }
 }
+.workbench-sidebar {
+  position: sticky;
+  top: 16px;
+  height: clamp(420px, calc(100dvh - 210px), 900px);
+  min-height: 0;
+  min-width: 0;
+}
+.workbench-sidebar > :first-child {
+  flex-shrink: 0;
+}
+.sidebar-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  display: flex;
+  flex-direction: column;
+  gap: inherit;
+  padding: 2px 6px 2px 2px;
+  margin: -2px;
+}
+.sidebar-scroll > * {
+  flex-shrink: 0;
+}
+.sidebar-scroll:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+  border-radius: 4px;
+}
+@media (max-width: 1300px) {
+  .workbench-sidebar {
+    position: static;
+  }
+  .activity-panel.workbench-sidebar {
+    height: clamp(420px, 70dvh, 720px);
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   *,
   *:before,

@@ -3,6 +3,7 @@
 import logging
 import secrets
 import sqlite3
+import time
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal, NotRequired, TypedDict
 from uuid import uuid4
@@ -32,6 +33,25 @@ class GraphState(TypedDict):
     task_id: str
     round: int
     plan: NotRequired[dict[str, Any]]
+
+
+CONFIGURATION_FAILURES = {
+    "connect_timeout": "连接模型服务超时（含网络连接或 TLS 握手），请稍后重试",
+    "read_timeout": "等待模型返回数据超时，请稍后重试",
+    "write_timeout": "向模型服务发送请求超时，请检查网络",
+    "timeout": "等待模型响应超时，可稍后重试",
+    "connection": "无法连接模型服务，请检查网络",
+    "authentication": "模型服务认证失败，请检查密钥",
+    "permission": "模型服务拒绝访问，请检查账户权限和模型名称",
+    "balance": "模型账户余额不足",
+    "rate_limit": "模型服务限流，请稍后重试",
+    "http_error": "模型服务未接受请求",
+    "response_limit": "模型响应超过时间或大小限制",
+    "incomplete": "模型回复未完整结束",
+    "schema": "已收到模型回复，但格式不符合要求；这不代表密钥输错",
+    "parse": "已收到模型回复，但内容无法解析",
+    "unknown": "未能完成连接测试，请稍后重试",
+}
 
 
 def timestamp() -> str:
@@ -108,6 +128,7 @@ class AgentService:
             ):
                 raise HTTPException(409, "模型正在处理任务或测试连接，请稍后再配置")
             self.configuring = True
+        started = time.monotonic()
         try:
             candidate = DeepSeekModel(
                 api_key=body.api_key.get_secret_value() if body else "",
@@ -133,6 +154,18 @@ class AgentService:
                 self.model = candidate
                 self.configuration_source = "memory" if body else "none"
             return self.configuration_status()
+        except ModelFailure as exc:
+            # Never forward even a ModelFailure message here: allowlisted diagnostics only.
+            code = exc.code if exc.code in CONFIGURATION_FAILURES else "unknown"
+            elapsed = time.monotonic() - started
+            logging.getLogger(__name__).warning(
+                "Model configuration test failed: category=%s elapsed_seconds=%.1f", code, elapsed
+            )
+            raise HTTPException(
+                502,
+                f"连接测试失败：{CONFIGURATION_FAILURES[code]}（耗时 {elapsed:.1f} 秒）。"
+                "原配置保持不变。",
+            ) from None
         except Exception:
             # Never include provider exceptions, response text or submitted credentials.
             raise HTTPException(
@@ -357,7 +390,9 @@ class AgentService:
             event=(
                 "解析问题",
                 "running",
-                "模型仅选择指标和期间，不接收或生成财务金额",
+                "模型仅提取分期和调整幅度，不计算金额、不批准方案"
+                if payload.get("mode") == "change"
+                else "模型仅选择指标和期间，不接收或生成财务金额",
             ),
         )
         plan = self.model.plan(

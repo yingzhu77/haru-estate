@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { formatBeijingTime } from '../../time'
 import { api } from '../../api/client'
 import type { Comparison, Run } from '../../api/types'
 import { formatMoney, showEvidence, state } from '../../state'
@@ -165,6 +166,9 @@ onBeforeUnmount(() => {
           <RouterLink :to="'/runs/' + row.id">
             {{ row.project_names.join('、') || '未命名项目' }}
           </RouterLink><small class="muted run-id">{{ row.id }}</small>
+          <RouterLink :to="'/runs/' + row.id">
+            查看结果与助手对话
+          </RouterLink>
         </template>
       </el-table-column>
       <el-table-column
@@ -213,11 +217,14 @@ onBeforeUnmount(() => {
         </template>
       </el-table-column>
       <el-table-column
-        label="生成时间"
-        min-width="160"
+        label="生成时间（北京时间）"
+        min-width="190"
       >
         <template #default="{ row }">
-          {{ row.created_at.replace('T', ' ').slice(0, 19) }}
+          <time
+            :datetime="row.created_at"
+            :title="row.created_at"
+          >{{ formatBeijingTime(row.created_at) }}</time>
         </template>
       </el-table-column>
     </el-table>

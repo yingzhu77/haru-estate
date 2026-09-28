@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { formatBeijingTime } from '../../time'
 import { api } from '../../api/client'
 import type { Revision, Run } from '../../api/types'
 import { formatMoney, showEvidence } from '../../state'
@@ -139,8 +140,11 @@ onBeforeUnmount(() => {
         <el-descriptions-item label="信息截止">
           {{ run.information_cutoff }}
         </el-descriptions-item>
-        <el-descriptions-item label="创建时间">
-          {{ run.created_at }}
+        <el-descriptions-item label="创建时间（北京时间）">
+          <time
+            :datetime="run.created_at"
+            :title="run.created_at"
+          >{{ formatBeijingTime(run.created_at) }}</time>
         </el-descriptions-item>
         <el-descriptions-item label="情景">
           {{ scenarioLabels[run.scenario] }}
@@ -222,7 +226,7 @@ onBeforeUnmount(() => {
         <el-timeline-item
           v-for="step in run.steps"
           :key="step.sequence + '-' + step.attempt"
-          :timestamp="step.created_at"
+          :timestamp="`${formatBeijingTime(step.created_at)}（北京时间）`"
           placement="top"
         >
           <strong>{{ step.name }} · {{ runLabels[step.status] ?? step.status }}</strong>
