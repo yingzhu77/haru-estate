@@ -85,38 +85,38 @@ it('selects an older pending task and retains its full clarification history', a
   wrapper.unmount()
 })
 
-it('binds confirmation to the displayed draft and preserves conflicts for review', async () => {
-  const draft: NonNullable<AgentTask['draft']> = {
-    id: 'draft-one',
-    token: 'approval-one',
+const draft: NonNullable<AgentTask['draft']> = {
+  id: 'draft-one',
+  token: 'approval-one',
+  project_id: 'p',
+  project_name: '模拟',
+  phase_id: 'phase',
+  phase_name: '一期',
+  base_revision_id: 'r',
+  base_version: 1,
+  known_on: '2026-09-24',
+  change: { phase_id: 'phase', field: 'price_change', value: '-0.05' },
+  before: '10000',
+  after: '9500',
+  preview: {
     project_id: 'p',
     project_name: '模拟',
-    phase_id: 'phase',
-    phase_name: '一期',
-    base_revision_id: 'r',
-    base_version: 1,
-    known_on: '2026-09-24',
-    change: { phase_id: 'phase', field: 'price_change', value: '-0.05' },
-    before: '10000',
-    after: '9500',
-    preview: {
-      project_id: 'p',
-      project_name: '模拟',
-      revision_id: 'r',
-      version: 1,
-      scenario: 'base',
-      scenario_price_percent: '0',
-      scenario_cost_percent: '0',
-      price_percent: '0',
-      cost_percent: '0',
-      future_cost_before: null,
-      future_cost_after: null,
-      collection_lag: 3,
-      extra_collection_delay: 0,
-      phases: [],
-      warnings: [],
-    },
-  }
+    revision_id: 'r',
+    version: 1,
+    scenario: 'base',
+    scenario_price_percent: '0',
+    scenario_cost_percent: '0',
+    price_percent: '0',
+    cost_percent: '0',
+    future_cost_before: null,
+    future_cost_after: null,
+    collection_lag: 3,
+    extra_collection_delay: 0,
+    phases: [],
+    warnings: [],
+  },
+}
+it('binds confirmation to the displayed draft and preserves conflicts for review', async () => {
   vi.mocked(api.agentTasks).mockResolvedValue([
     { ...task, mode: 'change', status: 'awaiting_confirmation', draft },
   ])
@@ -142,15 +142,24 @@ it('binds confirmation to the displayed draft and preserves conflicts for review
   wrapper.unmount()
 
   vi.mocked(api.agentTasks).mockResolvedValue([
-    { ...task, mode: 'change', status: 'completed', draft: { ...draft, revision_id: 'saved-revision' } },
+    {
+      ...task,
+      mode: 'change',
+      status: 'completed',
+      draft: { ...draft, revision_id: 'saved-revision' },
+    },
   ])
-  vi.mocked(api.input).mockResolvedValue({ id: 'saved-revision', version: 2 } as Awaited<ReturnType<typeof api.input>>)
+  vi.mocked(api.input).mockResolvedValue({ id: 'saved-revision', version: 2 } as Awaited<
+    ReturnType<typeof api.input>
+  >)
   const saved = mount(AgentChat, { props: { run } })
   await flushPromises()
   expect(api.input).toHaveBeenCalledWith('p', 'saved-revision')
   expect(saved.text()).toContain('已保存为数据版本 v2')
   expect(saved.text()).toContain('上方 v1 是调整前版本')
-  expect(saved.findAll('button').some(button => button.text() === '确认采用，保存新版本')).toBe(false)
+  expect(saved.findAll('button').some((button) => button.text() === '确认采用，保存新版本')).toBe(
+    false,
+  )
   saved.unmount()
 })
 it('shows unconfigured state without fabricating an answer or calling a model', async () => {
@@ -233,5 +242,92 @@ it('keeps an active clarification when another window adds a newer task', async 
   state.modelConfigurationVersion++
   await flushPromises()
   expect((wrapper.get('#agent-reply').element as HTMLTextAreaElement).value).toBe('正在补充的期间')
+  wrapper.unmount()
+})
+
+it('refills a failed change without sending, changing its known date or overwriting typed input', async () => {
+  vi.mocked(api.agentTasks).mockResolvedValue([
+    {
+      ...task,
+      mode: 'change',
+      status: 'failed',
+      calls: 3,
+      attempt: 3,
+      question: '一期交付推迟3个月',
+      known_on: '2026-09-24',
+    },
+  ])
+  const wrapper = mount(AgentChat, { props: { run } })
+  await flushPromises()
+  const retry = wrapper.findAll('button').find((button) => button.text() === '重试这条记录')!
+  const refill = wrapper.findAll('button').find((button) => button.text() === '填回原问题')!
+  expect(retry.attributes('disabled')).toBeDefined()
+  expect(wrapper.text()).toContain('已用 3/3 次模型调用')
+  await wrapper.get('#agent-question').setValue('未提交的新问题')
+  expect(refill.attributes('disabled')).toBeDefined()
+  await wrapper.get('#agent-question').setValue('')
+  await refill.trigger('click')
+  expect((wrapper.get('#agent-question').element as HTMLTextAreaElement).value).toBe(
+    '一期交付推迟3个月',
+  )
+  expect((wrapper.get('#agent-mode').element as HTMLSelectElement).value).toBe('change')
+  expect((wrapper.get('#agent-known').element as HTMLInputElement).value).toBe('2026-09-24')
+  expect(api.createAgentTask).not.toHaveBeenCalled()
+  expect(api.resumeAgent).not.toHaveBeenCalled()
+  wrapper.unmount()
+})
+
+it('continues polling while saved-version metadata is slow and ignores it after switching runs', async () => {
+  vi.useFakeTimers()
+  let resolveRevision!: (value: Awaited<ReturnType<typeof api.input>>) => void
+  vi.mocked(api.input).mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        resolveRevision = resolve
+      }),
+  )
+  vi.mocked(api.agentTasks).mockResolvedValue([
+    { ...task, id: 'active', status: 'running' },
+    { ...task, status: 'completed', draft: { ...draft, revision_id: 'saved' } },
+  ])
+  const wrapper = mount(AgentChat, { props: { run } })
+  try {
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(1200)
+    await flushPromises()
+    expect(api.agentTasks).toHaveBeenCalledTimes(2)
+    expect(api.input).toHaveBeenCalledTimes(1)
+    vi.mocked(api.agentTasks).mockResolvedValue([])
+    await wrapper.setProps({ run: { ...run, id: 'run-two' } })
+    await flushPromises()
+    resolveRevision({ id: 'saved', version: 99 } as Awaited<ReturnType<typeof api.input>>)
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('v99')
+    expect(wrapper.text()).toContain('run-two')
+  } finally {
+    wrapper.unmount()
+    vi.useRealTimers()
+  }
+})
+
+it('can reload a pending version after paging without accepting the old page response', async () => {
+  const resolvers: Array<(value: Awaited<ReturnType<typeof api.input>>) => void> = []
+  vi.mocked(api.input).mockImplementation(() => new Promise(resolve => { resolvers.push(resolve) }))
+  const completed: AgentTask = { ...task, status: 'completed', draft: { ...draft, revision_id: 'saved' } }
+  vi.mocked(api.agentTasks).mockResolvedValueOnce(
+    Array.from({ length: 20 }, (_, i) => ({ ...completed, id: `record-${i}` })),
+  ).mockResolvedValue([completed])
+  const wrapper = mount(AgentChat, { props: { run } })
+  await flushPromises()
+  expect(api.input).toHaveBeenCalledTimes(1)
+  await wrapper.findAll('button').find(button => button.text() === '更早记录')!.trigger('click')
+  await flushPromises()
+  expect(api.input).toHaveBeenCalledTimes(2)
+  resolvers[0]!({ id: 'saved', version: 99 } as Awaited<ReturnType<typeof api.input>>)
+  await flushPromises()
+  expect(wrapper.text()).not.toContain('v99')
+  resolvers[1]!({ id: 'saved', version: 2 } as Awaited<ReturnType<typeof api.input>>)
+  await flushPromises()
+  expect(wrapper.text()).toContain('已保存为数据版本 v2')
   wrapper.unmount()
 })

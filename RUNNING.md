@@ -66,6 +66,8 @@ Historical months require records; a zero-activity month must be explicitly reco
 
 The project portfolio freezes members and child run IDs, sums aligned flows and adds each project's uncovered cash shortfall before finding the peak. Cash surpluses do not fund other projects. Failed members keep the portfolio incomplete without a total. New projects and later edits do not alter previous results.
 
+Failed records display their used model-call budget and processing-attempt limit. **填回原问题** copies the original question, operation mode and known date into an empty input form without making a model request; clarification replies are not copied. Review the form before submitting a new task. Old records remain saved. Optional saved-version lookups run separately from task polling, so slow metadata cannot delay task-status updates.
+
 ## Backup and restore
 
 Create a consistent backup without copying a live WAL database directly:

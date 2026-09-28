@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { api } from '../../api/client'
 import type { AgentStatus, AgentTask, Run } from '../../api/types'
 import { showEvidence, state } from '../../state'
@@ -9,6 +9,8 @@ const emit = defineEmits<{ confirmed: [] }>()
 const status = ref<AgentStatus | null>(null)
 const tasks = ref<AgentTask[]>([])
 const savedVersions = ref<Record<string, number>>({})
+const pendingVersions = new Map<string, number>()
+const questionInput = ref<HTMLTextAreaElement | null>(null)
 const selectedId = ref('')
 const offset = ref(0)
 const question = ref('')
@@ -49,15 +51,11 @@ async function load(token: number, runId?: string) {
     if (generation !== token || read !== readSequence) return
     status.value = configuration
     tasks.value = saved
-    const revisions = await Promise.allSettled(saved.flatMap((task) => {
+    for (const task of saved) {
       const draft = task.draft
-      return draft?.revision_id && savedVersions.value[draft.revision_id] === undefined
-        ? [api.input(draft.project_id, draft.revision_id)] : []
-    }))
-    if (generation !== token || read !== readSequence) return
-    for (const revision of revisions) {
-      if (revision.status === 'fulfilled')
-        savedVersions.value[revision.value.id] = revision.value.version
+      if (draft?.revision_id && savedVersions.value[draft.revision_id] === undefined
+        && pendingVersions.get(draft.revision_id) !== token)
+        void loadSavedVersion(token, draft.project_id, draft.revision_id)
     }
     if (!selectedId.value && saved[0]) selectedId.value = saved[0].id
     if (saved.some((task) => ['queued', 'running'].includes(task.status))) {
@@ -68,6 +66,24 @@ async function load(token: number, runId?: string) {
       error.value = cause instanceof Error ? cause.message : '助手记录读取失败'
   }
 }
+async function loadSavedVersion(token: number, projectId: string, revisionId: string) {
+  pendingVersions.set(revisionId, token)
+  try {
+    const revision = await api.input(projectId, revisionId)
+    if (generation === token) savedVersions.value[revisionId] = revision.version
+  } catch {
+    // The saved revision ID remains visible. Optional metadata must not stop task polling.
+  } finally {
+    if (pendingVersions.get(revisionId) === token) pendingVersions.delete(revisionId)
+  }
+}
+function refillQuestion(task: AgentTask) {
+  if (busy.value || question.value.trim()) return
+  question.value = task.question
+  mode.value = task.mode
+  if (task.known_on) knownOn.value = task.known_on
+  void nextTick(() => questionInput.value?.focus())
+}
 watch(
   () => props.run?.id,
   () => {
@@ -75,6 +91,7 @@ watch(
     clearTimeout(timer)
     tasks.value = []
     savedVersions.value = {}
+    pendingVersions.clear()
     selectedId.value = ''
     offset.value = 0
     mode.value = 'query'
@@ -257,6 +274,7 @@ watch(() => state.modelConfigurationVersion, refresh)
       <label for="agent-question">{{ mode === 'query' ? '你想了解什么？' : '你想怎样调整计划？' }}</label>
       <textarea
         id="agent-question"
+        ref="questionInput"
         v-model="question"
         rows="2"
         maxlength="2000"
@@ -416,6 +434,24 @@ watch(() => state.modelConfigurationVersion, refresh)
       >
         重试这条记录
       </button>
+      <template v-if="['failed', 'interrupted'].includes(task.status)">
+        <p class="note">
+          已用 {{ task.calls }}/{{ status?.max_calls ?? 3 }} 次模型调用，失败也计入次数。系统不会自动重试。
+          <span v-if="(task.attempt ?? 1) >= 3">这条记录已达到处理次数上限，不能再重试。</span>
+          <span v-else-if="task.calls >= (status?.max_calls ?? 3)">模型调用次数已用完，恢复仅能继续已保存的步骤，不能再次请求模型。</span>
+          <span v-else>重试可能再次调用模型并产生费用。</span>
+        </p>
+        <button
+          type="button"
+          :disabled="busy || !!question.trim()"
+          @click="refillQuestion(task)"
+        >
+          填回原问题
+        </button>
+        <p class="note">
+          输入框已有内容时请先清空。填回不会发送请求；请补齐需要的说明，核对当前项目和日期，再手动提交。旧记录保留。
+        </p>
+      </template>
       <details v-if="task.steps?.length">
         <summary>处理记录 · {{ task.calls }} 次模型调用</summary>
         <p
