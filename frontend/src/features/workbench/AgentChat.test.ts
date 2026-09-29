@@ -75,8 +75,9 @@ it('selects an older pending task and retains its full clarification history', a
   await flushPromises()
   await wrapper
     .findAll('button')
-    .find((button) => button.text() === '继续这条记录')!
+    .find((button) => button.text() === '继续补充说明')!
     .trigger('click')
+  expect(wrapper.findAll('button').some((button) => button.text() === '查看这条记录')).toBe(true)
   expect(wrapper.text()).toContain('你的补充：当前范围')
   await wrapper.get('#agent-reply').setValue('未来12个月')
   await wrapper.findAll('form')[1]!.trigger('submit')

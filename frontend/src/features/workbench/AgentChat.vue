@@ -44,6 +44,13 @@ const labels: Record<AgentTask['status'], string> = {
   failed: '处理失败',
   interrupted: '服务中断，可继续',
 }
+function recordActionLabel(task: AgentTask) {
+  if (task.status === 'completed') return '查看这条记录'
+  if (task.status === 'awaiting_reply') return '继续补充说明'
+  if (task.status === 'awaiting_confirmation') return '查看待确认方案'
+  if (task.status === 'failed' || task.status === 'interrupted') return '查看并恢复'
+  return '查看处理进度'
+}
 async function load(token: number, runId?: string) {
   const read = ++readSequence
   try {
@@ -332,7 +339,7 @@ watch(() => state.modelConfigurationVersion, refresh)
         :disabled="busy"
         @click="selectedId = task.id"
       >
-        继续这条记录
+        {{ recordActionLabel(task) }}
       </button>
       <p
         v-for="(message, index) in task.dialogue"
