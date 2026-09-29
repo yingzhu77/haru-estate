@@ -2,6 +2,7 @@
 
 import json
 import time
+from decimal import Decimal
 from pathlib import Path
 
 import httpx
@@ -65,6 +66,7 @@ def completed_run(service: Service, *, portfolio: bool = False) -> Run:
 
 
 QUERY = AgentPlan(action="query", metric="profit", period="twelve_month")
+FUTURE_SIX = AgentPlan(action="query", metric="profit", period="future_months", months=6)
 CLARIFY = AgentPlan(action="clarify", clarification="请确认未来12个月还是指定某个月？")
 
 
@@ -136,6 +138,27 @@ def test_query_is_frozen_read_only_idempotent_and_persisted(tmp_path: Path) -> N
     assert resumed.agent.get(task.id) == result
     assert resumed.agent.list(run.id) == [result]
     resumed.stop()
+
+
+def test_future_months_query_sums_a_bound_prefix_with_decimal(tmp_path: Path) -> None:
+    model = DeterministicModel([FUTURE_SIX])
+    service = Service(tmp_path, agent_model=model)
+    service.start(worker=False)
+    run = completed_run(service)
+    task = service.agent.create(
+        AgentCreate(run_id=run.id, question="未来6个月利润？"), "future-six-query"
+    )
+    service.agent.process_next()
+    answer = service.agent.get(task.id).answer
+    assert answer is not None and run.result is not None
+    assert answer.months == run.result.target_months[:6]
+    expected = sum(
+        (Decimal(row.profit) for row in run.result.months if row.month in answer.months),
+        Decimal("0.00"),
+    )
+    assert answer.amount == str(expected)
+    assert service.run(run.id) == run
+    service.stop()
 
 
 def test_clarification_survives_restart_and_stale_reply_is_rejected(tmp_path: Path) -> None:
@@ -321,6 +344,13 @@ def test_query_stock_flow_and_peak_have_independent_expected_values() -> None:
         query_result(result, AgentPlan(action="query", metric="profit", period="next_month")).amount
         == "20.00"
     )
+    assert (
+        query_result(
+            result,
+            AgentPlan(action="query", metric="profit", period="future_months", months=2),
+        ).amount
+        == "50.00"
+    )
     cash = query_result(
         result, AgentPlan(action="query", metric="cash_balance", period="twelve_month")
     )
@@ -339,6 +369,8 @@ def test_query_stock_flow_and_peak_have_independent_expected_values() -> None:
         query_result(
             result, AgentPlan(action="query", metric="profit", period="month", month="2027-01")
         )
+    with pytest.raises(ValueError):
+        AgentPlan(action="query", metric="profit", period="future_months")
 
 
 def test_deepseek_adapter_validates_json_and_never_accepts_model_amount(

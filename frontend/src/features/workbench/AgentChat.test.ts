@@ -176,12 +176,15 @@ it('shows unconfigured state without fabricating an answer or calling a model', 
   expect(api.createAgentTask).not.toHaveBeenCalled()
   wrapper.unmount()
 })
-it('loads a persisted clarification and submits its exact token once', async () => {
-  vi.mocked(api.agentTasks).mockResolvedValue([task])
+it('renders a persisted clarification once and submits its exact token once', async () => {
+  vi.mocked(api.agentTasks).mockResolvedValue([
+    { ...task, dialogue: [{ role: 'assistant', content: task.clarification! }] },
+  ])
   vi.mocked(api.replyAgent).mockResolvedValue({ ...task, status: 'completed' })
   const wrapper = mount(AgentChat, { props: { run } })
   await flushPromises()
-  expect(wrapper.text()).toContain('请明确期间')
+  expect(wrapper.text().match(/请明确期间/g)).toHaveLength(1)
+  expect(wrapper.get('label[for="agent-reply"]').text()).toBe('请补充说明')
   await wrapper.get('#agent-reply').setValue('未来12个月')
   vi.mocked(api.agentTasks).mockResolvedValue([{ ...task, status: 'completed' }])
   await wrapper.findAll('form')[1]!.trigger('submit')

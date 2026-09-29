@@ -28,6 +28,8 @@ def query_result(result: ForecastResult, plan: AgentPlan) -> AgentAnswer:
         raise ValueError("不是有效的只读查询")
     if plan.period == "next_month":
         selected = result.target_months[:1]
+    elif plan.period == "future_months":
+        selected = result.target_months[: plan.months]
     elif plan.period == "twelve_month":
         selected = result.target_months
     elif plan.period == "month":

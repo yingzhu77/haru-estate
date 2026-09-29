@@ -350,7 +350,10 @@ watch(() => state.modelConfigurationVersion, refresh)
         v-if="task.id === current?.id && task.status === 'awaiting_reply'"
         @submit.prevent="submit('reply')"
       >
-        <label for="agent-reply">{{ task.clarification }}</label>
+        <label for="agent-reply">请补充说明</label>
+        <p class="note">
+          请直接回答上方确认问题；回答只用于继续这次已保存的查询。
+        </p>
         <textarea
           id="agent-reply"
           v-model="reply"

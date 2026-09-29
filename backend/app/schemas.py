@@ -460,7 +460,10 @@ class PhaseChange(Model):
 class AgentPlan(Model):
     action: Literal["query", "clarify", "draft"]
     metric: AgentMetric | None = None
-    period: Literal["next_month", "twelve_month", "lifecycle", "month"] | None = None
+    period: (
+        Literal["next_month", "future_months", "twelve_month", "lifecycle", "month"] | None
+    ) = None
+    months: int | None = Field(default=None, ge=1, le=12)
     month: Month | None = None
     clarification: str | None = Field(default=None, min_length=1, max_length=500)
     project_names: list[str] = Field(default_factory=list, max_length=20)
@@ -474,6 +477,10 @@ class AgentPlan(Model):
                 raise ValueError("查询必须明确指标和期间")
             if (self.period == "month") != (self.month is not None):
                 raise ValueError("仅单月查询需要指定月份")
+            if (self.period == "future_months") != (self.months is not None):
+                raise ValueError("未来连续月份查询需要明确月数")
+            if self.period != "future_months" and self.months is not None:
+                raise ValueError("只有未来连续月份查询可以指定月数")
         elif self.action == "draft":
             if self.change is None:
                 raise ValueError("草稿必须明确分期和白名单调整项")

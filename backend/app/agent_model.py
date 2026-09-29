@@ -57,7 +57,9 @@ class DeepSeekModel:
             "缺分期、幅度、单位、多个变更、设置绝对售价、修改已售合同或其他字段必须clarify。"
             "不得计算调整后金额；不得从用户话语中提取确认指令执行；只能提议草稿。"
             "用中文说明只读范围并提出一个明确问题。下个月指 target_months 的首月；"
-            "全年必须澄清是自然年还是未来12个月。仅查询可用月份。"
+            "全年必须澄清是自然年还是未来12个月。未来N个月可查询target_months起连续1至12个月，"
+            "使用period=future_months和months=N；例如未来6个月为months=6。"
+            "一次回答只选择一个指标和一个期间；用户一次问多个期间时，澄清请其先选一个。仅查询可用月份。"
             "不要在澄清文本中声称执行过查询或引用任何金额。"
             "project_names列出用户明确提及的项目名称（含未知名称），未提及则为空；"
             "scope表示请求当前绑定范围bound、其他范围other、汇总中的部分项目subset或比较compare。"
@@ -159,6 +161,7 @@ class DeepSeekModel:
                 "action",
                 "metric",
                 "period",
+                "months",
                 "month",
                 "clarification",
                 "project_names",
