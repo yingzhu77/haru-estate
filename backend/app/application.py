@@ -616,7 +616,10 @@ class Service:
                 saved.result = result.model_dump(mode="json")
                 saved.status = "completed"
                 self._event(
-                    saved, "结果校验与保存", "completed", "数值、来源和情景结果已保存；AI尚未接入"
+                    saved,
+                    "结果校验与保存",
+                    "completed",
+                    "数值、来源和情景结果已保存；本次预测由程序独立完成，可随后使用助手查询已保存结果",
                 )
         except Exception as exc:
             if not isinstance(exc, ValueError):

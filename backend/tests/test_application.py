@@ -36,6 +36,10 @@ def test_portfolio_fixed_members_and_sources(service: Service) -> None:
     assert finished.status == "completed"
     assert len(finished.members) == 2
     assert finished.result is not None
+    child = service.run(finished.members[0].run_id)
+    assert child.steps[-1].message == (
+        "数值、来源和情景结果已保存；本次预测由程序独立完成，可随后使用助手查询已保存结果"
+    )
     assert sum(D(m.profit or "0") for m in finished.members) == D(
         finished.result.summary.twelve_month_profit
     )
