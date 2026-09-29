@@ -2,6 +2,7 @@
 import type { Source } from '../../api/types'
 import { formatMoney } from '../../state'
 import { metricLabels } from '../data/editor'
+import { ruleIdentifier, ruleLabel } from './rules'
 defineProps<{ sources: Source[] }>()
 function label(metric: string) {
   return metricLabels[metric as keyof typeof metricLabels] ?? metric
@@ -49,9 +50,20 @@ function label(metric: string) {
     />
     <el-table-column
       prop="rule"
-      label="规则"
-      min-width="140"
-    />
+      label="计算规则"
+      min-width="160"
+    >
+      <template #default="{ row }">
+        <el-tooltip
+          :content="ruleIdentifier(row.rule)"
+          placement="top"
+        >
+          <span :aria-label="`计算规则：${ruleLabel(row.rule)}；${ruleIdentifier(row.rule)}`">
+            {{ ruleLabel(row.rule) }}
+          </span>
+        </el-tooltip>
+      </template>
+    </el-table-column>
     <el-table-column
       prop="description"
       label="计算依据"

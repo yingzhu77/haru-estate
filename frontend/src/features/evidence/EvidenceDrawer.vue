@@ -146,7 +146,10 @@ onBeforeUnmount(() => {
           </el-table-column>
         </el-table>
       </template>
-      <h3>组成记录与规则</h3>
+      <h3>组成记录与计算依据</h3>
+      <p class="muted">
+        计算规则以通俗名称展示；悬停名称可查看该次运行保存的追溯编号。
+      </p>
       <SourceTable
         v-if="evidence.sources.length"
         :sources="evidence.sources"
