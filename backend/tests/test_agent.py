@@ -9,6 +9,7 @@ import httpx
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -68,6 +69,24 @@ def completed_run(service: Service, *, portfolio: bool = False) -> Run:
 QUERY = AgentPlan(action="query", metric="profit", period="twelve_month")
 FUTURE_SIX = AgentPlan(action="query", metric="profit", period="future_months", months=6)
 CLARIFY = AgentPlan(action="clarify", clarification="请确认未来12个月还是指定某个月？")
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"run_id": "run", "question": "sk" + "-abcdefghijklmnopqrstuvwxyz"},
+        {"run_id": "run", "question": "API Key：long-secret-value"},
+        {"run_id": "run", "question": "-----" + "BEGIN" + " PRIVATE KEY-----"},
+    ],
+)
+def test_agent_question_rejects_secret_like_text(body: dict[str, str]) -> None:
+    with pytest.raises(ValidationError, match="疑似包含密钥"):
+        AgentCreate(**body)
+
+
+def test_agent_reply_rejects_secret_like_text() -> None:
+    with pytest.raises(ValidationError, match="疑似包含密钥"):
+        AgentReply(token="reply-token", reply="token=long-secret-value")
 
 
 @pytest.mark.parametrize(

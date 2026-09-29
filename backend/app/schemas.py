@@ -1,5 +1,6 @@
 """Public API contracts. Money is serialized as decimal text, in CNY yuan."""
 
+import re
 from datetime import date
 from decimal import Decimal
 from typing import Annotated, Literal
@@ -24,6 +25,17 @@ Metric = Literal[
     "repayment",
 ]
 Scenario = Literal["base", "optimistic", "prudent"]
+_SECRET_TEXT = re.compile(
+    r"(?:\bsk-[A-Za-z0-9_-]{12,}\b|-----BEGIN(?: [A-Z]+)? PRIVATE KEY-----|"
+    r"(?:api[_ -]?key|密钥|token)\s*[:=：]\s*\S{8,})",
+    re.IGNORECASE,
+)
+
+
+def reject_secret_text(value: str) -> str:
+    if _SECRET_TEXT.search(value):
+        raise ValueError("问题中疑似包含密钥或私钥，请删除后再提交")
+    return value
 
 
 class Model(BaseModel):
@@ -524,10 +536,20 @@ class AgentCreate(Model):
     mode: Literal["query", "change"] = "query"
     known_on: date | None = None
 
+    @field_validator("question")
+    @classmethod
+    def no_secret_in_question(cls, value: str) -> str:
+        return reject_secret_text(value)
+
 
 class AgentReply(Model):
     token: str = Field(min_length=1, max_length=100)
     reply: str = Field(min_length=1, max_length=1000)
+
+    @field_validator("reply")
+    @classmethod
+    def no_secret_in_reply(cls, value: str) -> str:
+        return reject_secret_text(value)
 
 
 class AgentAnswer(Model):
