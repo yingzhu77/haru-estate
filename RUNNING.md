@@ -80,3 +80,7 @@ docker compose cp api:/app/data/backups/manual-001.sqlite3 ./backups/manual-001.
 Use a new filename for each backup. Restore only while the target API is stopped, to a **new empty** data directory or volume under the filename `haru.sqlite3`. Start a separate API instance pointing `HARU_DATA_DIR` at it, check project/run counts and known results before switching. Never overwrite a live database or mix a restored database with old WAL files. Tests exercise backup and restore against independent temporary data.
 
 API documentation is available inside the container at `/docs`; public business endpoints use `/api/v1`. Generate the TypeScript contract with `python backend/export_openapi.py` followed by `npm run generate:api` in `frontend`.
+
+## 2026-09-30 云端验收状态
+
+公网来源抽屉已经过用户实际确认可打开。云端已完成一次延期草稿的人工确认并保存输入版本v2；旧运行仍是不可变的v1快照。下一验收是在信息截止日和预测基准日不早于变更获知日时生成一份v2新预测，再与旧运行做历史比较；不要把输入参数差异当作已计算的利润/现金差异。

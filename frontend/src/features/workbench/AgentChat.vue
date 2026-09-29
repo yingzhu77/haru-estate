@@ -423,7 +423,12 @@ watch(() => state.modelConfigurationVersion, refresh)
             <strong v-else>新数据版本已保存</strong>
             （版本编号 {{ task.draft.revision_id.slice(0, 8) }}）。上方 v{{ task.draft.base_version }} 是调整前版本。
           </p>
-          <p>保存数据不会自动生成新预测，原预测保持不变。</p>
+          <p>保存数据不会自动生成新预测，原预测保持不变；利润和现金的变化须以两份预测的结果比较为准。</p>
+          <p>
+            <RouterLink to="/data">
+              查看 v{{ task.draft.base_version }} 与新版本的输入差异
+            </RouterLink>。在“数据与假设”页底部的“输入版本与差异”中，默认核对相邻版本；请确认左侧为调整前版本、右侧为新版本。
+          </p>
           <p>
             <RouterLink to="/">
               前往预测工作台

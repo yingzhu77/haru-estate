@@ -158,6 +158,9 @@ it('binds confirmation to the displayed draft and preserves conflicts for review
   expect(api.input).toHaveBeenCalledWith('p', 'saved-revision')
   expect(saved.text()).toContain('已保存为数据版本 v2')
   expect(saved.text()).toContain('上方 v1 是调整前版本')
+  expect(saved.text()).toContain('利润和现金的变化须以两份预测的结果比较为准')
+  expect(saved.text()).toContain('查看 v1 与新版本的输入差异')
+  expect(saved.findAll('a').some((link) => link.text().includes('查看 v1 与新版本的输入差异'))).toBe(true)
   expect(saved.findAll('button').some((button) => button.text() === '确认采用，保存新版本')).toBe(
     false,
   )
