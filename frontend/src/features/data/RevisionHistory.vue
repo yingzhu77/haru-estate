@@ -12,7 +12,9 @@ const left = ref('')
 const right = ref('')
 const comparison = ref<RevisionComparison | null>(null)
 const choices = ref<RevisionPage['items']>([])
+const recordNames = ref<Record<string, string>>({})
 const pageNumber = computed(() => Math.floor(offset.value / 10) + 1)
+const chosen = computed(() => new Map(choices.value.map((item) => [item.id, item])))
 let generation = 0
 let compareGeneration = 0
 
@@ -43,8 +45,24 @@ async function compare() {
   comparison.value = null
   error.value = ''
   try {
-    const result = await api.compareRevisions(props.projectId, left.value, right.value)
-    if (token === compareGeneration) comparison.value = result
+    const [result, snapshots] = await Promise.all([
+      api.compareRevisions(props.projectId, left.value, right.value),
+      Promise.allSettled([
+        api.input(props.projectId, left.value),
+        api.input(props.projectId, right.value),
+      ]),
+    ])
+    if (token !== compareGeneration) return
+    comparison.value = result
+    const revisions = snapshots.flatMap((snapshot) =>
+      snapshot.status === 'fulfilled' ? [snapshot.value] : [],
+    )
+    recordNames.value = Object.fromEntries(
+      revisions.flatMap((revision) => revision.data.phases ?? []).map((phase) => [
+        phase.id,
+        `${phase.name}（分期）`,
+      ]),
+    )
   } catch (cause) {
     if (token === compareGeneration)
       error.value = cause instanceof Error ? cause.message : String(cause)
@@ -101,8 +119,27 @@ const labels: Record<string, string> = {
 function pathLabel(path: string) {
   return path
     .split('/')
-    .map((part) => labels[part] ?? part)
+    .map((part) => labels[part] ?? recordNames.value[part] ?? part)
     .join(' / ')
+}
+function monthDifference(before: string | null, after: string | null) {
+  if (!before || !after || !/^\d{4}-\d{2}$/.test(before) || !/^\d{4}-\d{2}$/.test(after))
+    return null
+  const [beforeYear, beforeMonth] = before.split('-').map(Number)
+  const [afterYear, afterMonth] = after.split('-').map(Number)
+  return (afterYear - beforeYear) * 12 + afterMonth - beforeMonth
+}
+function businessMeaning(row: RevisionComparison['changes'][number]) {
+  const field = row.path.split('/').at(-1)
+  if (field === 'delivery_month') {
+    const months = monthDifference(row.before, row.after)
+    if (months && months > 0) return `交付计划延后 ${months} 个月；需重新生成预测后查看利润和现金影响。`
+    if (months && months < 0) return `交付计划提前 ${Math.abs(months)} 个月；需重新生成预测后查看利润和现金影响。`
+    return '交付计划已调整；需重新生成预测后查看利润和现金影响。'
+  }
+  if (field === 'known_on')
+    return `从 ${row.after ?? '该日期'} 起，这项新版计划才能用于预测；更早的预测仍保留原计划。`
+  return '这是输入参数的版本差异；已保存预测不会被改写。'
 }
 </script>
 
@@ -118,7 +155,7 @@ function pathLabel(path: string) {
       </el-button>
     </div>
     <p class="muted">
-      只读回看，不覆盖当前草稿。版本差异按记录编号对齐；收付款节点保留完整安排，金额单位为元。
+      只读回看，不覆盖当前草稿。先选调整前、调整后版本，再查看这次变化对新预测意味着什么。
     </p>
     <el-alert
       v-if="error"
@@ -205,8 +242,13 @@ function pathLabel(path: string) {
       :data="comparison.changes"
       empty-text="业务输入未变化；获知日和说明请查看版本列表"
     >
+      <template #append>
+        <p class="comparison-note">
+          对比版本：v{{ chosen.get(left)?.version ?? '—' }} → v{{ chosen.get(right)?.version ?? '—' }}。这里是输入计划的变化，不是已经计算出的利润或现金变化。
+        </p>
+      </template>
       <el-table-column
-        label="字段 / 记录"
+        label="调整对象"
         min-width="210"
       >
         <template #default="{ row }">
@@ -214,7 +256,7 @@ function pathLabel(path: string) {
         </template>
       </el-table-column>
       <el-table-column
-        label="变化"
+        label="调整类型"
         width="75"
       >
         <template #default="{ row }">
@@ -226,7 +268,7 @@ function pathLabel(path: string) {
         </template>
       </el-table-column>
       <el-table-column
-        label="原值"
+        :label="`调整前（v${chosen.get(left)?.version ?? '—'}）`"
         min-width="190"
       >
         <template #default="{ row }">
@@ -234,11 +276,19 @@ function pathLabel(path: string) {
         </template>
       </el-table-column>
       <el-table-column
-        label="对照值"
+        :label="`调整后（v${chosen.get(right)?.version ?? '—'}）`"
         min-width="190"
       >
         <template #default="{ row }">
           <span class="diff-value">{{ row.after ?? '—' }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column
+        label="这意味着什么"
+        min-width="270"
+      >
+        <template #default="{ row }">
+          {{ businessMeaning(row) }}
         </template>
       </el-table-column>
     </el-table>
@@ -261,5 +311,12 @@ function pathLabel(path: string) {
 .diff-value {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+.comparison-note {
+  padding: 10px 12px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
 }
 </style>

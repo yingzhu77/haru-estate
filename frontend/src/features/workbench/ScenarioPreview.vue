@@ -53,6 +53,13 @@ onBeforeUnmount(() => {
 const number = (value: string) =>
   Number(value).toLocaleString('zh-CN', { maximumFractionDigits: 2 })
 const percent = (value: string) => `${Number(value) > 0 ? '+' : ''}${number(value)}%`
+function errorMessage(message: string) {
+  if (message.includes('信息截止之前没有可用输入版本'))
+    return '当前信息截止日早于可用输入版本。请把信息截止日调至该版本的获知日或之后，再查看参数。'
+  if (message.includes('已结账月份不能晚于预测基准月'))
+    return '预测基准日早于已结账月份。请将预测基准日调至已结账月或之后。'
+  return message
+}
 </script>
 
 <template>
@@ -61,7 +68,7 @@ const percent = (value: string) => `${Number(value) > 0 ? '+' : ''}${number(valu
     aria-label="情景有效参数"
     aria-live="polite"
   >
-    <h3>本情景调整项</h3>
+    <h3>基础情景的影响</h3>
     <p v-if="loading">
       正在按信息截止日期读取参数…
     </p>
@@ -69,7 +76,7 @@ const percent = (value: string) => `${Number(value) > 0 ? '+' : ''}${number(valu
       v-else-if="error"
       role="alert"
     >
-      {{ error }}
+      {{ errorMessage(error) }}
     </p>
     <p v-else-if="!items.length">
       选择项目后查看。
@@ -78,7 +85,7 @@ const percent = (value: string) => `${Number(value) > 0 ? '+' : ''}${number(valu
       未售售价 {{ percent(items[0].scenario_price_percent) }} · 未来成本
       {{ percent(items[0].scenario_cost_percent) }}
     </p>
-    <h3>叠加后的有效参数</h3>
+    <h3>本次预测实际采用的条件</h3>
     <article
       v-for="item in items"
       :key="item.project_id"
@@ -115,7 +122,7 @@ const percent = (value: string) => `${Number(value) > 0 ? '+' : ''}${number(valu
       </details>
     </article>
     <p class="note">
-      草稿预览，采用信息截止前可用的输入版本。手动调整与情景预设相乘叠加；点击生成后才创建预测。已签金额和历史成本保持原值。
+      草稿预览，采用信息截止前可用的输入版本。手动调整与情景预设相乘叠加，例如“乐观售价 +5%”再手动下调 5%，最终约为 -0.25%。点击生成后才创建预测；已签金额和历史成本保持原值。
     </p>
     <details>
       <summary>这些词是什么意思？</summary>

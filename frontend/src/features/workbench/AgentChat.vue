@@ -215,25 +215,20 @@ watch(() => state.modelConfigurationVersion, refresh)
     >
       先完成一次预测，再对这次结果提问。
     </p>
-    <p
+    <aside
       v-if="run"
-      class="note"
+      class="conversation-context"
     >
-      当前预测：{{ run.project_names.join('、') }} · 编号 {{ run.id.slice(0, 8) }} ·
-      查询范围以这份预测保存的项目、情景和期间为准
-    </p>
-    <p
-      v-if="run"
-      class="note"
-    >
-      对话随这份预测保存。切换或生成新预测后，旧对话仍在原预测中。
+      <b>当前正在查看这份预测的对话</b>
+      <span>{{ run.project_names.join('、') }} · 运行 {{ run.id.slice(0, 8) }}</span>
+      <p>对话随预测保存。切换或生成新预测后，请到对应运行查看原对话。</p>
       <RouterLink :to="`/runs/${run.id}`">
-        打开本次预测与对话
+        打开本次预测与对话记录
       </RouterLink>
       · <RouterLink to="/runs">
-        查找其他预测的对话
+        查找其他预测的对话记录
       </RouterLink>
-    </p>
+    </aside>
     <form @submit.prevent="submit('create')">
       <label for="agent-mode">你想做什么？</label>
       <select
@@ -511,6 +506,24 @@ p {
 }
 .notice {
   color: var(--accent);
+}
+.conversation-context {
+  margin: 10px 0;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+.conversation-context b,
+.conversation-context span {
+  display: block;
+}
+.conversation-context span,
+.conversation-context p {
+  color: var(--muted);
+}
+.conversation-context p {
+  margin: 4px 0;
 }
 label {
   display: block;

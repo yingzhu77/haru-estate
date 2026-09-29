@@ -61,7 +61,7 @@ const phases = computed(() => props.revision?.data.phases ?? [])
     aria-label="预测参数与情景"
   >
     <div class="panel-heading">
-      <h2>参数与情景</h2>
+      <h2>本次预测条件</h2>
       <el-icon class="muted">
         <Setting />
       </el-icon>
@@ -70,8 +70,12 @@ const phases = computed(() => props.revision?.data.phases ?? [])
       class="sidebar-scroll"
       tabindex="0"
       role="region"
-      aria-label="参数与情景内容，可滚动"
+      aria-label="本次预测条件，可滚动"
     >
+      <div class="control-step">
+        <b>第一步：选择基础情景</b>
+        <p>基准用于查看当前计划；乐观、审慎用于查看整体假设下的范围。</p>
+      </div>
       <div
         class="scenario-control"
         role="group"
@@ -131,7 +135,7 @@ const phases = computed(() => props.revision?.data.phases ?? [])
             </dl>
           </div>
           <div class="section-heading">
-            <h3>未来计划调整</h3>
+            <h3>第二步：可选的临时调整</h3>
             <button
               class="icon-reset"
               aria-label="重置当前项目情景调整"
@@ -192,7 +196,7 @@ const phases = computed(() => props.revision?.data.phases ?? [])
             /><span>月</span>
           </div>
           <p class="field-note">
-            仅调整未来计划，已签合同与历史实际保持原值。其他输入可在数据管理中修订。
+            用于单独观察某项未来计划变化。演示时建议选“基准”并只调整一项；若同时选择乐观/审慎，系统会在下方显示叠加后的最终条件。已签合同与历史实际保持原值。
           </p>
         </template>
       </template>
@@ -270,6 +274,15 @@ const phases = computed(() => props.revision?.data.phases ?? [])
   background: var(--soft);
   border: 1px solid var(--border);
   border-radius: 7px;
+}
+.control-step {
+  margin: 0 0 8px;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.control-step p {
+  color: var(--muted);
+  margin: 3px 0 0;
 }
 .scenario-control button {
   flex: 1;
