@@ -3,6 +3,9 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { api } from '../../api/client'
 import type { AgentStatus, AgentTask, Run } from '../../api/types'
 import { showEvidence, state } from '../../state'
+import { isLocalEntry } from '../../deployment'
+
+const localEntry = isLocalEntry(window.location.hostname)
 
 const props = defineProps<{ run: Run | null }>()
 const emit = defineEmits<{ confirmed: [] }>()
@@ -194,7 +197,7 @@ watch(() => state.modelConfigurationVersion, refresh)
       v-if="status && !status.configured"
       class="notice"
     >
-      DeepSeek 未配置。请打开右上角“AI 设置”连接助手；仍可正常测算、查看历史和数据来源。
+      DeepSeek 未配置。{{ localEntry ? '请打开右上角“AI 设置”连接助手' : '请联系演示管理员开启助手' }}；仍可正常测算、查看历史和数据来源。
     </p>
     <p v-else-if="status">
       已连接 {{ status.provider }} · {{ status.model }}

@@ -4,6 +4,8 @@ import { Sunny, Moon, ArrowRight } from '@element-plus/icons-vue'
 import { state, setTheme, refreshProjects } from './state'
 import EvidenceDrawer from './features/evidence/EvidenceDrawer.vue'
 import ModelSettings from './features/settings/ModelSettings.vue'
+import { isLocalEntry } from './deployment'
+const localEntry = isLocalEntry(window.location.hostname)
 setTheme(state.theme)
 onMounted(() =>
   refreshProjects().catch((e: Error) => {
@@ -34,7 +36,7 @@ onMounted(() =>
       </nav>
       <div class="header-actions">
         <span class="demo-badge">模拟演示 · 非真实经营数据</span>
-        <ModelSettings />
+        <ModelSettings v-if="localEntry" />
         <div
           class="theme-switch"
           aria-label="主题切换"
@@ -92,6 +94,13 @@ onMounted(() =>
       type="error"
       show-icon
       @close="state.error = ''"
+    />
+    <el-alert
+      v-if="!localEntry"
+      title="共享模拟演示：项目、预测和操作记录对受邀体验者可见，请勿输入真实业务资料。AI 配置由管理员维护。"
+      type="info"
+      :closable="false"
+      show-icon
     />
     <main><RouterView /></main>
     <EvidenceDrawer />

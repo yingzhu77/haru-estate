@@ -12,7 +12,7 @@ Open http://127.0.0.1:8080. Only the web service binds a host port. SQLite and i
 
 If 8080 is occupied, set `HARU_PORT=8088` before running Compose (PowerShell: `$env:HARU_PORT='8088'`); then use http://127.0.0.1:8088. This does not change the database volume.
 
-The demo binds to localhost and has no authentication or tenant authorization. Do not expose it to a public network. Only one API process is supported. A running job interrupted by a restart can be resumed from History using its original snapshot; completed results are immutable.
+The default demo binds to localhost and has no authentication or tenant authorization. Do not expose this default configuration to a public network. For invited cloud demonstrations, use the separate [cloud deployment configuration](CLOUD.md), with HTTPS and a shared access password; it still has no per-user data isolation. Only one API process is supported. A running job interrupted by a restart can be resumed from History using its original snapshot; completed results are immutable.
 
 ## Local development
 

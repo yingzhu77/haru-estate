@@ -1,0 +1,88 @@
+# Empty keys are not counted: reads/polling do not consume mutation limits.
+map $request_method $write_key {
+    default shared-demo;
+    GET "";
+    HEAD "";
+    OPTIONS "";
+}
+map $http_origin $same_origin {
+    default 0;
+    "https://${HARU_DOMAIN}" 1;
+}
+map "$write_key:$same_origin" $reject_origin {
+    default 0;
+    "shared-demo:0" 1;
+}
+map "$request_method:$uri" $agent_key {
+    default "";
+    ~^POST:/api/v1/agent/tasks/?$ shared-agent;
+    ~^POST:/api/v1/agent/tasks/[^/]+/(resume|reply)/?$ shared-agent;
+}
+map "$agent_key:${HARU_DEMO_AI}" $ai_disabled {
+    default 0;
+    ~^shared-agent: 1;
+    "shared-agent:on" 0;
+}
+limit_req_zone $write_key zone=demo_writes:1m rate=12r/m;
+limit_req_zone $agent_key zone=demo_agent:1m rate=2r/m;
+
+server {
+    listen 80 default_server;
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+    client_max_body_size 2m;
+    # Avoid storing questions, query strings or credentials in access logs.
+    access_log off;
+    error_log /dev/stderr crit;
+    limit_req_status 429;
+    error_page 429 = @rate_limited;
+    location @rate_limited {
+        default_type application/json;
+        add_header Retry-After 30 always;
+        return 429 '{"code":"RATE_LIMITED","message":"演示环境操作较频繁，请稍后再试；尚未提交本次操作。"}';
+    }
+    location ^~ /api/v1/model-config {
+        default_type application/json;
+        return 403 '{"code":"FORBIDDEN","message":"模型配置由演示管理员维护。"}';
+    }
+    location /api/ {
+        default_type application/json;
+        if ($reject_origin) {
+            return 403 '{"code":"FORBIDDEN","message":"请从演示网站页面提交操作。"}';
+        }
+        if ($ai_disabled) {
+            return 403 '{"code":"AI_PAUSED","message":"演示助手暂未开放，请联系管理员；其他测算功能可正常使用。"}';
+        }
+        limit_req zone=demo_writes burst=4 nodelay;
+        limit_req zone=demo_agent burst=1 nodelay;
+        proxy_pass http://api:8000;
+        proxy_set_header Host $host;
+        proxy_set_header Authorization "";
+        proxy_read_timeout 60s;
+    }
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
+
+# Separate listener, published on host loopback only. Never proxy it publicly.
+server {
+    listen 8081;
+    server_name localhost;
+    root /usr/share/nginx/html;
+    index index.html;
+    client_max_body_size 2m;
+    access_log off;
+    error_log /dev/stderr crit;
+    add_header Cache-Control no-store always;
+    location /api/ {
+        proxy_pass http://api:8000;
+        proxy_set_header Host $host;
+        proxy_set_header Authorization "";
+        proxy_read_timeout 60s;
+    }
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}

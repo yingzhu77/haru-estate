@@ -1,0 +1,79 @@
+name: haru-estate-cloud
+
+# Standalone configuration. Do not merge with compose.yaml.
+services:
+  api:
+    image: haru-estate-cloud-api:${HARU_RELEASE:?Set HARU_RELEASE to the reviewed commit}
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    stop_grace_period: 70s
+    environment:
+      HARU_DATA_DIR: /app/data
+    volumes:
+      - cloud-data:/app/data
+    networks: [backend]
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=3)"]
+      interval: 10s
+      timeout: 4s
+      retries: 20
+    logging: &logging
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '3'
+
+  web:
+    image: haru-estate-cloud-web:${HARU_RELEASE:?Set HARU_RELEASE}
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    restart: unless-stopped
+    environment:
+      HARU_DOMAIN: ${HARU_DOMAIN:?Set HARU_DOMAIN to a DNS hostname}
+      HARU_DEMO_AI: ${HARU_DEMO_AI:-off}
+    volumes:
+      - ./deploy/cloud/nginx.conf.template:/etc/nginx/templates/default.conf.template:ro
+    # Only the administrator's SSH tunnel can reach this host port.
+    ports:
+      - "127.0.0.1:${HARU_ADMIN_PORT:-18088}:8081"
+    networks: [edge, backend]
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, "http://127.0.0.1:8081/api/v1/health"]
+      interval: 10s
+      timeout: 4s
+      retries: 10
+    logging: *logging
+
+  gateway:
+    image: caddy:2.11.2-alpine@sha256:834468128c7696cec0ceea6172f7d692daf645ae51983ca76e39da54a97c570d
+    restart: unless-stopped
+    environment:
+      HARU_DOMAIN: ${HARU_DOMAIN:?Set HARU_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/cloud/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./secrets/cloud-auth.caddy:/run/secrets/cloud-auth.caddy:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks: [edge]
+    depends_on:
+      web:
+        condition: service_healthy
+    logging: *logging
+
+networks:
+  edge:
+  backend:
+
+volumes:
+  cloud-data:
+  caddy-data:
+  caddy-config:

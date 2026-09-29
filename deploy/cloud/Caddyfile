@@ -1,0 +1,25 @@
+{
+    admin off
+}
+
+https://{$HARU_DOMAIN} {
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy no-referrer
+        Strict-Transport-Security "max-age=31536000"
+        Cache-Control "no-store"
+        -Server
+    }
+    route {
+        # Required file; absence or invalid hashes must fail startup.
+        basic_auth {
+            import /run/secrets/cloud-auth.caddy
+        }
+        reverse_proxy web:80 {
+            # Never send the shared access password to the business API.
+            header_up -Authorization
+            header_up -Proxy-Authorization
+        }
+    }
+}
