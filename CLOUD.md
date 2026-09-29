@@ -80,6 +80,29 @@ docker compose --env-file .env.cloud -f compose.cloud.yaml start api
 
 ## 5. 更新、回退与口令轮换
 
+### 仅更新网页与网关（不重启 API）
+
+适用于前端体验、文案、静态资源或网关配置更新。此操作不修改 `cloud-data` 卷，也不会使已在 API 进程内存中的模型配置失效。先核对工作区没有本地部署改动，再切换到已审阅提交；不要执行 `down`、`down -v`、`restart api` 或包含 `api` 的 `up` 命令。
+
+```sh
+cd ~/haru-estate
+git fetch origin codex/cloud-demo
+git checkout codex/cloud-demo
+git pull --ff-only origin codex/cloud-demo
+git rev-parse --short HEAD
+
+# 将 .env.cloud 中的 HARU_RELEASE 改为上面核对过的完整提交 SHA。
+# 本轮网页版本为 d398e13e6c0612100c8c4f96d9b511fd4e85fa26。
+sed -i 's/^HARU_RELEASE=.*/HARU_RELEASE=d398e13e6c0612100c8c4f96d9b511fd4e85fa26/' .env.cloud
+
+docker compose --env-file .env.cloud -f compose.cloud.yaml build web
+docker compose --env-file .env.cloud -f compose.cloud.yaml up -d --no-deps --force-recreate web
+docker compose --env-file .env.cloud -f compose.cloud.yaml up -d --no-deps --force-recreate gateway
+docker compose --env-file .env.cloud -f compose.cloud.yaml ps
+```
+
+最后确认 `api` 仍显示原来的 `Up (healthy)`，而 `web`、`gateway` 也为运行状态；然后刷新浏览器验证新页面。若要部署改动 API 的提交，必须先按双库备份流程备份，并在 API 更新后重新通过管理员入口配置模型。
+
 更新前完成双库备份，保存旧的 `HARU_RELEASE` 和镜像。切换经审阅的提交，更新 `.env.cloud` 的 `HARU_RELEASE`，先 build 成功，再 up；不要启动第二个 API 副本共享同一 SQLite 卷。API 重建后重新配置模型。发生数据库迁移时，回退须在独立新卷恢复匹配旧应用的双库备份，不能假定旧代码兼容新库。
 
 轮换口令：
