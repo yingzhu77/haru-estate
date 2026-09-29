@@ -89,11 +89,11 @@ cd ~/haru-estate
 git fetch origin codex/cloud-demo
 git checkout codex/cloud-demo
 git pull --ff-only origin codex/cloud-demo
-git rev-parse --short HEAD
+release="$(git rev-parse HEAD)"
+printf '部署提交：%s\n' "$release"
 
 # 将 .env.cloud 中的 HARU_RELEASE 改为上面核对过的完整提交 SHA。
-# 本轮网页版本为 d398e13e6c0612100c8c4f96d9b511fd4e85fa26。
-sed -i 's/^HARU_RELEASE=.*/HARU_RELEASE=d398e13e6c0612100c8c4f96d9b511fd4e85fa26/' .env.cloud
+sed -i "s/^HARU_RELEASE=.*/HARU_RELEASE=$release/" .env.cloud
 
 docker compose --env-file .env.cloud -f compose.cloud.yaml build web
 docker compose --env-file .env.cloud -f compose.cloud.yaml up -d --no-deps --force-recreate web
