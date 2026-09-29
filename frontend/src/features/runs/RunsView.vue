@@ -8,7 +8,9 @@ import { runLabels, scenarioLabels } from '../data/editor'
 const runs = ref<Run[]>([])
 const kind = ref<'all' | 'project' | 'portfolio'>('all')
 const projectId = ref('')
-const loading = ref(false)
+// Start in a loading state so the first browser render never claims that history is empty.
+const loading = ref(true)
+const listLoaded = ref(false)
 const error = ref('')
 const left = ref('')
 const right = ref('')
@@ -60,6 +62,7 @@ async function load() {
     if (generation !== loadGeneration) return
     runs.value = result.items
     total.value = result.total
+    listLoaded.value = true
   } catch (e) {
     if (generation === loadGeneration) error.value = e instanceof Error ? e.message : String(e)
   } finally {
@@ -74,6 +77,7 @@ watch([kind, projectId], () => {
   offset.value = 0
   runs.value = []
   total.value = 0
+  listLoaded.value = false
   void load()
 })
 watch([left, right], () => {
@@ -152,7 +156,30 @@ onBeforeUnmount(() => {
         />
       </el-select>
     </div>
+    <div
+      v-if="loading && !listLoaded"
+      class="history-loading"
+      role="status"
+      aria-live="polite"
+    >
+      <el-skeleton
+        :rows="6"
+        animated
+      />
+      <p class="muted">
+        正在读取已保存的历史预测…
+      </p>
+    </div>
+    <el-empty
+      v-else-if="error && !listLoaded"
+      description="历史预测暂未读取成功，请检查连接后重试。"
+    >
+      <el-button @click="load">
+        重新读取
+      </el-button>
+    </el-empty>
     <el-table
+      v-else
       v-loading="loading"
       :data="runs"
       row-key="id"
@@ -228,7 +255,10 @@ onBeforeUnmount(() => {
         </template>
       </el-table-column>
     </el-table>
-    <div class="toolbar pagination">
+    <div
+      v-if="listLoaded"
+      class="toolbar pagination"
+    >
       <el-button
         :disabled="loading || !offset"
         @click="turn(-1)"
@@ -353,6 +383,14 @@ onBeforeUnmount(() => {
 }
 .pagination {
   margin-top: 16px;
+}
+.history-loading {
+  min-height: 300px;
+  padding: 24px 8px 8px;
+}
+.history-loading p {
+  margin: 18px 0 0;
+  text-align: center;
 }
 .compare-panel p {
   font-size: 12px;

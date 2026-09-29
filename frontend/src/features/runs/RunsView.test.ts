@@ -2,9 +2,11 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { flushPromises, shallowMount, type VueWrapper } from '@vue/test-utils'
 import {
   ElAlert,
+  ElEmpty,
   ElOption,
   ElRadioButton,
   ElRadioGroup,
+  ElSkeleton,
   ElSelect,
   ElTable,
   ElTableColumn,
@@ -72,9 +74,11 @@ function open() {
     global: {
       components: {
         ElAlert,
+        ElEmpty,
         ElOption,
         ElRadioButton,
         ElRadioGroup,
+        ElSkeleton,
         ElSelect,
         ElTable,
         ElTableColumn,
@@ -85,6 +89,22 @@ function open() {
     },
   })
 }
+
+it('shows loading progress instead of an empty-history message before the first response', async () => {
+  let resolve!: (value: RunPage) => void
+  vi.mocked(api.runPage).mockImplementationOnce(
+    () =>
+      new Promise((done) => {
+        resolve = done
+      }),
+  )
+  open()
+  expect(wrapper.text()).toContain('正在读取已保存的历史预测…')
+  expect(wrapper.text()).not.toContain('暂无运行，请先到工作台创建预测')
+  resolve(page('loaded-run'))
+  await flushPromises()
+  expect(wrapper.findComponent({ name: 'ElTable' }).props('data')[0].id).toBe('loaded-run')
+})
 
 it('filters on the server, paginates, and retains a comparison selected on a previous page', async () => {
   open()
