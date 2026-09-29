@@ -57,7 +57,10 @@ class ConfigureTests(unittest.TestCase):
         auth.write_text("original-hash")
         (self.root / ".env.cloud").write_text("original-settings")
         result = subprocess.CompletedProcess([], 0, b"not-a-valid-hash", b"")
-        with patch("subprocess.run", return_value=result), self.assertRaises(RuntimeError):
+        with (
+            patch("subprocess.run", return_value=result),
+            self.assertRaises(RuntimeError),
+        ):
             self.invoke("--rotate-password")
         self.assertEqual(auth.read_text(), "original-hash")
         self.assertEqual((self.root / ".env.cloud").read_text(), "original-settings")

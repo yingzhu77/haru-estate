@@ -20,12 +20,16 @@ const emit = defineEmits<{
   generate: []
 }>()
 const overrides = computed(() => state.overrides[state.selectedProjectId] ?? defaultOverrides())
+// Slider steps are whole percentages, but JavaScript binary floating point can render
+// values such as -0.07 * 100 as -7.000000000000001. Keep the stored Decimal string
+// unchanged and normalize only the number supplied to the control and its label.
+const asPercentage = (fraction: string) => Number((Number(fraction) * 100).toFixed(4))
 const pricePercent = computed({
-  get: () => Number(overrides.value.price_change) * 100,
+  get: () => asPercentage(overrides.value.price_change),
   set: (value: number) => update({ price_change: (value / 100).toFixed(4) }),
 })
 const costPercent = computed({
-  get: () => Number(overrides.value.remaining_cost_change) * 100,
+  get: () => asPercentage(overrides.value.remaining_cost_change),
   set: (value: number) => update({ remaining_cost_change: (value / 100).toFixed(4) }),
 })
 const collectionDelay = computed({

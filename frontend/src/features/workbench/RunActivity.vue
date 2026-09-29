@@ -29,10 +29,11 @@ const timeLabel = (value: string) => {
     <div class="activity-heading">
       <img
         v-if="state.theme === 'acg'"
-        src="/brand/logo.png"
+        src="/brand/logo.webp"
         alt="晴屿助手头像"
         width="37"
         height="37"
+        decoding="async"
       >
       <div
         v-else

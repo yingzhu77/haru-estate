@@ -8,9 +8,9 @@ https://{$HARU_DOMAIN} {
         X-Frame-Options DENY
         Referrer-Policy no-referrer
         Strict-Transport-Security "max-age=31536000"
-        Cache-Control "no-store"
         -Server
     }
+    encode zstd gzip
     route {
         # Required file; absence or invalid hashes must fail startup.
         basic_auth {

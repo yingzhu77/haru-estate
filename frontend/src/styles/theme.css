@@ -15,7 +15,7 @@
   --el-border-radius-base: 7px;
 }
 :root[data-theme='acg'] {
-  background: url('/brand/acg-background.png') center/cover fixed;
+  background: url('/brand/acg-background.webp') center/cover fixed;
 }
 :root[data-theme='minimal'] {
   --accent: #1264d8;

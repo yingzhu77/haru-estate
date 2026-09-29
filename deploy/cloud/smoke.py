@@ -8,6 +8,7 @@ import argparse
 import base64
 import http.client
 import json
+import re
 import secrets
 import ssl
 import subprocess
@@ -15,6 +16,7 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+from email.message import Message
 from pathlib import Path
 from uuid import uuid4
 
@@ -186,6 +188,20 @@ def main() -> None:
                 except urllib.error.HTTPError as error:
                     return error.code, error.read()
 
+            def response_headers(path: str) -> tuple[int, Message]:
+                request_headers = {
+                    "Authorization": authorization,
+                    "Accept-Encoding": "gzip",
+                }
+                request = urllib.request.Request(url + path, headers=request_headers)
+                try:
+                    with opener.open(request, timeout=10) as response:
+                        response.read()
+                        return response.status, response.headers
+                except urllib.error.HTTPError as error:
+                    error.read()
+                    return error.code, error.headers
+
             for path in [
                 "/",
                 "/brand/logo.png",
@@ -205,8 +221,34 @@ def main() -> None:
                 == 401,
                 "wrong password blocked",
             )
-            check(request("/")[0] == 200, "authenticated page and trusted test TLS")
+            page_status, page = request("/")
+            check(page_status == 200, "authenticated page and trusted test TLS")
             check(request("/api/v1/health")[0] == 200, "authenticated API")
+            status, headers = response_headers("/api/v1/health")
+            check(
+                status == 200 and headers.get("Cache-Control") == "no-store",
+                "API responses remain noncacheable",
+            )
+            status, headers = response_headers("/brand/logo.webp")
+            check(
+                status == 200
+                and headers.get("Cache-Control") == "public, max-age=604800",
+                "brand image receives a bounded browser cache policy",
+            )
+            script_match = re.search(rb'src="(/assets/[^"?]+\.js)"', page)
+            if script_match is None:
+                raise AssertionError("page exposes a versioned application script")
+            check(True, "page exposes a versioned application script")
+            _, headers = response_headers(script_match.group(1).decode())
+            check(
+                headers.get("Content-Encoding") == "gzip",
+                "gateway compresses accepted application scripts",
+            )
+            status, headers = response_headers("/")
+            check(
+                status == 200 and headers.get("Cache-Control") == "no-cache",
+                "HTML is revalidated before a new deploy is used",
+            )
             before = request("/api/v1/projects")[1]
             check(
                 request("/api/v1/projects", "POST", authenticated=False)[0] == 401,

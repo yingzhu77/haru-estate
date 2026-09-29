@@ -21,8 +21,9 @@ onMounted(() =>
         to="/"
       >
         <img
-          src="/brand/logo.png"
+          src="/brand/logo.webp"
           alt="晴屿 Logo"
+          decoding="async"
         ><span>晴屿 <b>HaruEstate</b><small>地产预算与利润预测</small></span>
       </RouterLink>
       <nav aria-label="主导航">
