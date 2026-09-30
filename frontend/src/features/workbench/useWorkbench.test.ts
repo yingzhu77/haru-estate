@@ -185,6 +185,24 @@ describe('workbench persistent-run coordination', () => {
     expect(api.run).toHaveBeenCalledTimes(2)
   })
 
+  it('recovers a running forecast after a temporary status request failure', async () => {
+    const waiting = run([projectA], 'running')
+    vi.mocked(api.runs).mockResolvedValue([waiting])
+    vi.mocked(api.run)
+      .mockRejectedValueOnce(new Error('网络暂时中断'))
+      .mockResolvedValueOnce({ ...waiting, status: 'completed', result })
+    const workbench = mountWorkbench()
+    await flushPromises()
+
+    expect(workbench.pollError.value).toBe('网络暂时中断')
+    expect(workbench.currentRun.value?.status).toBe('running')
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(workbench.currentRun.value?.status).toBe('completed')
+    expect(workbench.pollError.value).toBe('')
+    await vi.advanceTimersByTimeAsync(10000)
+    expect(api.run).toHaveBeenCalledTimes(2)
+  })
+
   it.each(['failed', 'incomplete', 'interrupted'])(
     'stops polling at %s without filling in a missing result',
     async (terminal) => {

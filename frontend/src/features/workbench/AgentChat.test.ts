@@ -317,6 +317,28 @@ it('continues polling while saved-version metadata is slow and ignores it after 
   }
 })
 
+it('recovers a running assistant task after a temporary polling failure', async () => {
+  vi.useFakeTimers()
+  vi.mocked(api.agentTasks)
+    .mockResolvedValueOnce([{ ...task, status: 'running' }])
+    .mockRejectedValueOnce(new Error('网络暂时中断'))
+    .mockResolvedValueOnce([{ ...task, status: 'completed' }])
+  const wrapper = mount(AgentChat, { props: { run } })
+  try {
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(1200)
+    expect(wrapper.text()).toContain('网络暂时中断')
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(wrapper.text()).toContain('回答已保存')
+    expect(wrapper.text()).not.toContain('网络暂时中断')
+    await vi.advanceTimersByTimeAsync(10000)
+    expect(api.agentTasks).toHaveBeenCalledTimes(3)
+  } finally {
+    wrapper.unmount()
+    vi.useRealTimers()
+  }
+})
+
 it('can reload a pending version after paging without accepting the old page response', async () => {
   const resolvers: Array<(value: Awaited<ReturnType<typeof api.input>>) => void> = []
   vi.mocked(api.input).mockImplementation(() => new Promise(resolve => { resolvers.push(resolve) }))

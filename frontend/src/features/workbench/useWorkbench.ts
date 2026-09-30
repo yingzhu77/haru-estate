@@ -113,6 +113,7 @@ export function useWorkbench() {
         state.activeRun?.id === runId
       ) {
         pollError.value = cause instanceof Error ? cause.message : '暂时无法读取运行状态。'
+        if (isRunning(state.activeRun)) pollTimer = setTimeout(() => void poll(runId), 3000)
       }
     }
   }

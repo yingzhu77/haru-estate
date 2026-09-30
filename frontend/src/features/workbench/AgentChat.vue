@@ -61,6 +61,7 @@ async function load(token: number, runId?: string) {
     if (generation !== token || read !== readSequence) return
     status.value = configuration
     tasks.value = saved
+    error.value = ''
     for (const task of saved) {
       const draft = task.draft
       if (draft?.revision_id && savedVersions.value[draft.revision_id] === undefined
@@ -72,8 +73,12 @@ async function load(token: number, runId?: string) {
       timer = setTimeout(() => void load(token, runId), 1200)
     }
   } catch (cause) {
-    if (generation === token && read === readSequence)
+    if (generation === token && read === readSequence) {
       error.value = cause instanceof Error ? cause.message : '助手记录读取失败'
+      if (tasks.value.some((task) => ['queued', 'running'].includes(task.status))) {
+        timer = setTimeout(() => void load(token, runId), 3000)
+      }
+    }
   }
 }
 async function loadSavedVersion(token: number, projectId: string, revisionId: string) {
